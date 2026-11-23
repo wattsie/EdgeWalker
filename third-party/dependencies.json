@@ -1,0 +1,883 @@
+[
+  {
+    "name": "aead",
+    "version": "0.5.2",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/traits",
+    "files": [
+      "aead-0.5.2/LICENSE-APACHE",
+      "aead-0.5.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "aes",
+    "version": "0.8.4",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/block-ciphers",
+    "files": [
+      "aes-0.8.4/LICENSE-APACHE",
+      "aes-0.8.4/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "aes-gcm",
+    "version": "0.10.3",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/RustCrypto/AEADs",
+    "files": [
+      "aes-gcm-0.10.3/LICENSE-APACHE",
+      "aes-gcm-0.10.3/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "anstream",
+    "version": "1.0.0",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-cli/anstyle.git",
+    "files": [
+      "anstream-1.0.0/LICENSE-APACHE",
+      "anstream-1.0.0/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "anstyle",
+    "version": "1.0.14",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-cli/anstyle.git",
+    "files": [
+      "anstyle-1.0.14/LICENSE-APACHE",
+      "anstyle-1.0.14/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "anstyle-parse",
+    "version": "1.0.0",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-cli/anstyle.git",
+    "files": [
+      "anstyle-parse-1.0.0/LICENSE-APACHE",
+      "anstyle-parse-1.0.0/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "anstyle-query",
+    "version": "1.1.5",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-cli/anstyle.git",
+    "files": [
+      "anstyle-query-1.1.5/LICENSE-APACHE",
+      "anstyle-query-1.1.5/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "anstyle-wincon",
+    "version": "3.0.11",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-cli/anstyle.git",
+    "files": [
+      "anstyle-wincon-3.0.11/LICENSE-APACHE",
+      "anstyle-wincon-3.0.11/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "anyhow",
+    "version": "1.0.104",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/anyhow",
+    "files": [
+      "anyhow-1.0.104/LICENSE-APACHE",
+      "anyhow-1.0.104/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "blake2",
+    "version": "0.10.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/hashes",
+    "files": [
+      "blake2-0.10.6/LICENSE-APACHE",
+      "blake2-0.10.6/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "block-buffer",
+    "version": "0.10.4",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/utils",
+    "files": [
+      "block-buffer-0.10.4/LICENSE-APACHE",
+      "block-buffer-0.10.4/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "cc",
+    "version": "1.11.3",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/cc-rs",
+    "files": [
+      "cc-1.11.3/LICENSE-APACHE",
+      "cc-1.11.3/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "cfg-if",
+    "version": "1.0.5",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/cfg-if",
+    "files": [
+      "cfg-if-1.0.5/LICENSE-APACHE",
+      "cfg-if-1.0.5/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "chacha20",
+    "version": "0.9.1",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/RustCrypto/stream-ciphers",
+    "files": [
+      "chacha20-0.9.1/LICENSE-APACHE",
+      "chacha20-0.9.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "chacha20poly1305",
+    "version": "0.10.1",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/RustCrypto/AEADs/tree/master/chacha20poly1305",
+    "files": [
+      "chacha20poly1305-0.10.1/LICENSE-APACHE",
+      "chacha20poly1305-0.10.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "cipher",
+    "version": "0.4.4",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/traits",
+    "files": [
+      "cipher-0.4.4/LICENSE-APACHE",
+      "cipher-0.4.4/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "clap",
+    "version": "4.6.9",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/clap-rs/clap",
+    "files": [
+      "clap-4.6.9/LICENSE-APACHE",
+      "clap-4.6.9/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "clap_builder",
+    "version": "4.6.7",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/clap-rs/clap",
+    "files": [
+      "clap_builder-4.6.7/LICENSE-APACHE",
+      "clap_builder-4.6.7/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "clap_derive",
+    "version": "4.6.9",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/clap-rs/clap",
+    "files": [
+      "clap_derive-4.6.9/LICENSE-APACHE",
+      "clap_derive-4.6.9/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "clap_lex",
+    "version": "1.1.2",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/clap-rs/clap",
+    "files": [
+      "clap_lex-1.1.2/LICENSE-APACHE",
+      "clap_lex-1.1.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "colorchoice",
+    "version": "1.0.5",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-cli/anstyle.git",
+    "files": [
+      "colorchoice-1.0.5/LICENSE-APACHE",
+      "colorchoice-1.0.5/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "cpufeatures",
+    "version": "0.2.17",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/utils",
+    "files": [
+      "cpufeatures-0.2.17/LICENSE-APACHE",
+      "cpufeatures-0.2.17/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "crypto-common",
+    "version": "0.1.7",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/traits",
+    "files": [
+      "crypto-common-0.1.7/LICENSE-APACHE",
+      "crypto-common-0.1.7/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "ctr",
+    "version": "0.9.2",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/block-modes",
+    "files": [
+      "ctr-0.9.2/LICENSE-APACHE",
+      "ctr-0.9.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "curve25519-dalek",
+    "version": "4.1.3",
+    "license": "BSD-3-Clause",
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek",
+    "files": [
+      "curve25519-dalek-4.1.3/LICENSE"
+    ]
+  },
+  {
+    "name": "curve25519-dalek-derive",
+    "version": "0.1.1",
+    "license": "MIT/Apache-2.0",
+    "repository": "https://github.com/dalek-cryptography/curve25519-dalek",
+    "files": [
+      "curve25519-dalek-derive-0.1.1/LICENSE-APACHE",
+      "curve25519-dalek-derive-0.1.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "digest",
+    "version": "0.10.7",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/traits",
+    "files": [
+      "digest-0.10.7/LICENSE-APACHE",
+      "digest-0.10.7/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "fiat-crypto",
+    "version": "0.2.9",
+    "license": "MIT OR Apache-2.0 OR BSD-1-Clause",
+    "repository": "https://github.com/mit-plv/fiat-crypto",
+    "files": [
+      "fiat-crypto-0.2.9/COPYRIGHT",
+      "fiat-crypto-0.2.9/LICENSE-APACHE",
+      "fiat-crypto-0.2.9/LICENSE-BSD-1",
+      "fiat-crypto-0.2.9/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "find-msvc-tools",
+    "version": "0.1.15",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/cc-rs",
+    "files": [
+      "find-msvc-tools-0.1.15/LICENSE-APACHE",
+      "find-msvc-tools-0.1.15/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "generic-array",
+    "version": "0.14.7",
+    "license": "MIT",
+    "repository": "https://github.com/fizyk20/generic-array.git",
+    "files": [
+      "generic-array-0.14.7/LICENSE"
+    ]
+  },
+  {
+    "name": "getrandom",
+    "version": "0.2.17",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-random/getrandom",
+    "files": [
+      "getrandom-0.2.17/LICENSE-APACHE",
+      "getrandom-0.2.17/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "getrandom",
+    "version": "0.3.4",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-random/getrandom",
+    "files": [
+      "getrandom-0.3.4/LICENSE-APACHE",
+      "getrandom-0.3.4/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "ghash",
+    "version": "0.5.1",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/RustCrypto/universal-hashes",
+    "files": [
+      "ghash-0.5.1/LICENSE-APACHE",
+      "ghash-0.5.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "heck",
+    "version": "0.5.0",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/withoutboats/heck",
+    "files": [
+      "heck-0.5.0/LICENSE-APACHE",
+      "heck-0.5.0/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "hkdf",
+    "version": "0.12.4",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/KDFs/",
+    "files": [
+      "hkdf-0.12.4/LICENSE-APACHE",
+      "hkdf-0.12.4/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "hmac",
+    "version": "0.12.1",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/MACs",
+    "files": [
+      "hmac-0.12.1/LICENSE-APACHE",
+      "hmac-0.12.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "inout",
+    "version": "0.1.4",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/utils",
+    "files": [
+      "inout-0.1.4/LICENSE-APACHE",
+      "inout-0.1.4/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "is_terminal_polyfill",
+    "version": "1.70.2",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/polyfill-rs/is_terminal_polyfill",
+    "files": [
+      "is_terminal_polyfill-1.70.2/LICENSE-APACHE",
+      "is_terminal_polyfill-1.70.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "itoa",
+    "version": "1.0.19",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/itoa",
+    "files": [
+      "itoa-1.0.19/LICENSE-APACHE",
+      "itoa-1.0.19/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "libc",
+    "version": "0.2.191",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/libc",
+    "files": [
+      "libc-0.2.191/LICENSE-APACHE",
+      "libc-0.2.191/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "memchr",
+    "version": "2.8.3",
+    "license": "Unlicense OR MIT",
+    "repository": "https://github.com/BurntSushi/memchr",
+    "files": [
+      "memchr-2.8.3/COPYING",
+      "memchr-2.8.3/LICENSE-MIT",
+      "memchr-2.8.3/UNLICENSE"
+    ]
+  },
+  {
+    "name": "once_cell_polyfill",
+    "version": "1.70.2",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/polyfill-rs/once_cell_polyfill",
+    "files": [
+      "once_cell_polyfill-1.70.2/LICENSE-APACHE",
+      "once_cell_polyfill-1.70.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "opaque-debug",
+    "version": "0.3.1",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/utils",
+    "files": [
+      "opaque-debug-0.3.1/LICENSE-APACHE",
+      "opaque-debug-0.3.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "poly1305",
+    "version": "0.8.0",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/RustCrypto/universal-hashes",
+    "files": [
+      "poly1305-0.8.0/LICENSE-APACHE",
+      "poly1305-0.8.0/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "polyval",
+    "version": "0.6.2",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/RustCrypto/universal-hashes",
+    "files": [
+      "polyval-0.6.2/LICENSE-APACHE",
+      "polyval-0.6.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "proc-macro2",
+    "version": "1.0.107",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/proc-macro2",
+    "files": [
+      "proc-macro2-1.0.107/LICENSE-APACHE",
+      "proc-macro2-1.0.107/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "quote",
+    "version": "1.0.47",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/quote",
+    "files": [
+      "quote-1.0.47/LICENSE-APACHE",
+      "quote-1.0.47/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "r-efi",
+    "version": "5.3.0",
+    "license": "MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+    "repository": "https://github.com/r-efi/r-efi",
+    "files": []
+  },
+  {
+    "name": "rand_core",
+    "version": "0.6.4",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-random/rand",
+    "files": [
+      "rand_core-0.6.4/COPYRIGHT",
+      "rand_core-0.6.4/LICENSE-APACHE",
+      "rand_core-0.6.4/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "ring",
+    "version": "0.17.14",
+    "license": "Apache-2.0 AND ISC",
+    "repository": "https://github.com/briansmith/ring",
+    "files": [
+      "ring-0.17.14/LICENSE",
+      "ring-0.17.14/LICENSE-BoringSSL",
+      "ring-0.17.14/LICENSE-other-bits"
+    ]
+  },
+  {
+    "name": "rustc_version",
+    "version": "0.4.1",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/djc/rustc-version-rs",
+    "files": [
+      "rustc_version-0.4.1/LICENSE-APACHE",
+      "rustc_version-0.4.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "semver",
+    "version": "1.0.28",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/semver",
+    "files": [
+      "semver-1.0.28/LICENSE-APACHE",
+      "semver-1.0.28/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "serde",
+    "version": "1.0.229",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/serde",
+    "files": [
+      "serde-1.0.229/LICENSE-APACHE",
+      "serde-1.0.229/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "serde_core",
+    "version": "1.0.229",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/serde",
+    "files": [
+      "serde_core-1.0.229/LICENSE-APACHE",
+      "serde_core-1.0.229/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "serde_derive",
+    "version": "1.0.229",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/serde",
+    "files": [
+      "serde_derive-1.0.229/LICENSE-APACHE",
+      "serde_derive-1.0.229/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "serde_json",
+    "version": "1.0.154",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/json",
+    "files": [
+      "serde_json-1.0.154/LICENSE-APACHE",
+      "serde_json-1.0.154/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "sha2",
+    "version": "0.10.9",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/hashes",
+    "files": [
+      "sha2-0.10.9/LICENSE-APACHE",
+      "sha2-0.10.9/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "shlex",
+    "version": "2.0.1",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/comex/rust-shlex",
+    "files": [
+      "shlex-2.0.1/LICENSE-APACHE",
+      "shlex-2.0.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "snow",
+    "version": "0.10.0",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/mcginty/snow",
+    "files": [
+      "snow-0.10.0/LICENSE-APACHE",
+      "snow-0.10.0/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "socket2",
+    "version": "0.6.5",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/socket2",
+    "files": [
+      "socket2-0.6.5/LICENSE-APACHE",
+      "socket2-0.6.5/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "spake2",
+    "version": "0.4.0",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/PAKEs/tree/master/spake2",
+    "files": [
+      "spake2-0.4.0/LICENSE-APACHE",
+      "spake2-0.4.0/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "strsim",
+    "version": "0.11.1",
+    "license": "MIT",
+    "repository": "https://github.com/rapidfuzz/strsim-rs",
+    "files": [
+      "strsim-0.11.1/LICENSE"
+    ]
+  },
+  {
+    "name": "subtle",
+    "version": "2.6.1",
+    "license": "BSD-3-Clause",
+    "repository": "https://github.com/dalek-cryptography/subtle",
+    "files": [
+      "subtle-2.6.1/LICENSE"
+    ]
+  },
+  {
+    "name": "syn",
+    "version": "2.0.119",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/syn",
+    "files": [
+      "syn-2.0.119/LICENSE-APACHE",
+      "syn-2.0.119/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "syn",
+    "version": "3.0.10",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/syn",
+    "files": [
+      "syn-3.0.10/LICENSE-APACHE",
+      "syn-3.0.10/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "typenum",
+    "version": "1.20.1",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/paholg/typenum",
+    "files": [
+      "typenum-1.20.1/LICENSE",
+      "typenum-1.20.1/LICENSE-APACHE",
+      "typenum-1.20.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "unicode-ident",
+    "version": "1.0.27",
+    "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+    "repository": "https://github.com/dtolnay/unicode-ident",
+    "files": [
+      "unicode-ident-1.0.27/LICENSE-APACHE",
+      "unicode-ident-1.0.27/LICENSE-MIT",
+      "unicode-ident-1.0.27/LICENSE-UNICODE"
+    ]
+  },
+  {
+    "name": "universal-hash",
+    "version": "0.5.1",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/RustCrypto/traits",
+    "files": [
+      "universal-hash-0.5.1/LICENSE-APACHE",
+      "universal-hash-0.5.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "untrusted",
+    "version": "0.9.0",
+    "license": "ISC",
+    "repository": "https://github.com/briansmith/untrusted",
+    "files": [
+      "untrusted-0.9.0/LICENSE.txt"
+    ]
+  },
+  {
+    "name": "utf8parse",
+    "version": "0.2.2",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/alacritty/vte",
+    "files": [
+      "utf8parse-0.2.2/LICENSE-APACHE",
+      "utf8parse-0.2.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "version_check",
+    "version": "0.9.5",
+    "license": "MIT/Apache-2.0",
+    "repository": "https://github.com/SergioBenitez/version_check",
+    "files": [
+      "version_check-0.9.5/LICENSE-APACHE",
+      "version_check-0.9.5/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "wasi",
+    "version": "0.11.1+wasi-snapshot-preview1",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasi",
+    "files": [
+      "wasi-0.11.1+wasi-snapshot-preview1/LICENSE-APACHE",
+      "wasi-0.11.1+wasi-snapshot-preview1/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "wasi-0.11.1+wasi-snapshot-preview1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "wasip2",
+    "version": "1.0.4+wasi-0.2.12",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasi-rs",
+    "files": [
+      "wasip2-1.0.4+wasi-0.2.12/LICENSE-APACHE",
+      "wasip2-1.0.4+wasi-0.2.12/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "wasip2-1.0.4+wasi-0.2.12/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "windows-link",
+    "version": "0.2.1",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows-link-0.2.1/license-apache-2.0",
+      "windows-link-0.2.1/license-mit"
+    ]
+  },
+  {
+    "name": "windows-sys",
+    "version": "0.52.0",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows-sys-0.52.0/license-apache-2.0",
+      "windows-sys-0.52.0/license-mit"
+    ]
+  },
+  {
+    "name": "windows-sys",
+    "version": "0.61.2",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows-sys-0.61.2/license-apache-2.0",
+      "windows-sys-0.61.2/license-mit"
+    ]
+  },
+  {
+    "name": "windows-targets",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows-targets-0.52.6/license-apache-2.0",
+      "windows-targets-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "windows_aarch64_gnullvm",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows_aarch64_gnullvm-0.52.6/license-apache-2.0",
+      "windows_aarch64_gnullvm-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "windows_aarch64_msvc",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows_aarch64_msvc-0.52.6/license-apache-2.0",
+      "windows_aarch64_msvc-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "windows_i686_gnu",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows_i686_gnu-0.52.6/license-apache-2.0",
+      "windows_i686_gnu-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "windows_i686_gnullvm",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows_i686_gnullvm-0.52.6/license-apache-2.0",
+      "windows_i686_gnullvm-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "windows_i686_msvc",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows_i686_msvc-0.52.6/license-apache-2.0",
+      "windows_i686_msvc-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "windows_x86_64_gnu",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows_x86_64_gnu-0.52.6/license-apache-2.0",
+      "windows_x86_64_gnu-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "windows_x86_64_gnullvm",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows_x86_64_gnullvm-0.52.6/license-apache-2.0",
+      "windows_x86_64_gnullvm-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "windows_x86_64_msvc",
+    "version": "0.52.6",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/microsoft/windows-rs",
+    "files": [
+      "windows_x86_64_msvc-0.52.6/license-apache-2.0",
+      "windows_x86_64_msvc-0.52.6/license-mit"
+    ]
+  },
+  {
+    "name": "wit-bindgen",
+    "version": "0.57.1",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wit-bindgen",
+    "files": [
+      "wit-bindgen-0.57.1/LICENSE-APACHE",
+      "wit-bindgen-0.57.1/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "wit-bindgen-0.57.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "zeroize",
+    "version": "1.9.2",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/RustCrypto/utils",
+    "files": [
+      "zeroize-1.9.2/LICENSE-APACHE",
+      "zeroize-1.9.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "zmij",
+    "version": "1.0.23",
+    "license": "MIT",
+    "repository": "https://github.com/dtolnay/zmij",
+    "files": [
+      "zmij-1.0.23/LICENSE-MIT"
+    ]
+  }
+]

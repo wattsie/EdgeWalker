@@ -1,0 +1,20 @@
+[package]
+name = "edgewalker"
+version = "0.1.1-rc.8"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "edgewalker-native"
+path = "native/src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+getrandom = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+snow = "0.10"
+spake2 = "0.4"
+libc = "0.2"
+socket2 = "0.6"

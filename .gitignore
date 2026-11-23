@@ -1,0 +1,9 @@
+.DS_Store
+/target/
+__pycache__/
+/dist/
+/.venv/
+/.ruff_cache/
+/lab/
+/config.json
+/run-*/
