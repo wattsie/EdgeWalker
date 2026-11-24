@@ -10,6 +10,7 @@ check:
 	python3 -B -m unittest discover -s tests -v
 	python3 -B tests/integration/native_loopback.py -v
 	python3 -B tests/integration/operator_loopback.py -v
+	python3 -B tests/integration/calibration_loopback.py -v
 
 package: build
 	python3 -B scripts/package.py --output dist

@@ -430,6 +430,7 @@ def plan(args):
             ramp_step_bps=max(1, initial // 2),
             probe_step_bps=max(1, initial // 10),
             window_ms=args.window_ms,
+            feedback_ms=args.window_ms,
             min_packets=3,
             early_loss_count=3,
             settle_ms=0,
@@ -478,14 +479,17 @@ def plan(args):
             or not 0 <= cfg["minimum_bps"] <= cfg["start_bps"]
         ):
             raise ValueError("invalid minimum-rate policy")
-        if cfg["hold_ms"] <= args.window_ms + 500:
+        integer(cfg["feedback_ms"], "feedback_ms", 250)
+        if cfg["feedback_ms"] > 10000:
+            raise ValueError("feedback window must be 250..10000 ms")
+        if cfg["hold_ms"] <= max(args.window_ms, cfg["feedback_ms"]) + 500:
             raise ValueError("hold timer must accommodate the measurement and drain")
         if not cfg["loss_only"]:
             cfg["delay_policy"] = {
                 k: cfg[k] for k in ("growth_us", "observe_ms", "min_gain_bps")
             }
         max_window = 800_000_000 * min(args.udp_size, 1000) // maximum
-        if max(args.window_ms, args.overload_ms) > max_window:
+        if max(args.window_ms, cfg["feedback_ms"], args.overload_ms) > max_window:
             raise ValueError(f"{name} ceiling exceeds native window packet limit; "
                              f"maximum window at this ceiling is {max_window} ms")
         cfg["udp_size"] = args.udp_size
@@ -497,6 +501,16 @@ def plan(args):
 
 
 def run(args):
+    if args.window_ms is None:
+        args.window_ms = 5000
+        if args.plan:
+            supplied = json.loads(args.plan.read_text())
+            if isinstance(supplied, dict) and supplied and all(
+                isinstance(v, dict) and type(v.get("window_ms")) is int for v in supplied.values()
+            ):
+                windows = {v["window_ms"] for v in supplied.values()}
+                if len(windows) == 1:
+                    args.window_ms = windows.pop()
     if not 250 <= args.window_ms <= 10000 or (
         args.duration is not None and not 0 < args.duration <= 1e9
     ):
@@ -614,11 +628,12 @@ def run(args):
                         continue
                     remaining = end - time.monotonic()
                     available_ms = send_time_available_ms(remaining, report_overhead_ms)
-                    ms = min(args.window_ms, available_ms)
+                    feedback_ms = min(settings[n]["feedback_ms"] for n in active_names)
+                    ms = min(feedback_ms, available_ms)
                     # The native trend estimator needs three pairs of samples.
                     # Extend this send window at a low offer without relaxing
                     # feedback deadlines or exceeding either direction's budget.
-                    if available_ms >= args.window_ms and args.mode != "tcp":
+                    if available_ms >= feedback_ms and args.mode != "tcp":
                         desired = ms
                         limit = min(10000, available_ms)
                         for n in active_names:
@@ -913,6 +928,8 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(prog="edgewalker")
     sub = parser.add_subparsers(dest="action", required=True)
+    from calibrate import add_command, calibrate
+    add_command(sub)
     for name in ("server", "keygen"):
         sub.add_parser(name, add_help=False)
     for name in ("report", "replay"):
@@ -948,7 +965,7 @@ def main():
         default=1000,
         help="UDP data record bytes including measurement header",
     )
-    p.add_argument("--window-ms", type=int, default=5000)
+    p.add_argument("--window-ms", type=int, help="measurement window in ms (common plan value or 5000)")
     p.add_argument("--plan", type=Path, help="per-direction JSON settings")
     p.add_argument(
         "--timing-every",
@@ -975,6 +992,9 @@ def main():
         binary = engine_path()
         os.execv(binary, [binary, *sys.argv[1:]])
     args = parser.parse_args()
+    if args.action == "calibrate":
+        signal.signal(signal.SIGTERM, signal.default_int_handler)
+        return calibrate(args)
     if args.action == "report":
         if args.html:
             write_html(args.path, args.html)

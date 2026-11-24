@@ -4,9 +4,69 @@ EdgeWalker measures the traffic a link can sustain by adjusting the sending rate
 
 The Rust engine handles network traffic. Python manages sessions, replays receiver feedback and writes reports. See the [design brief](docs/brief.md) for the requirements and [third-party notices](third-party/dependencies.json) for dependency licenses.
 
+## Install
+
+Use Python 3.11 or later on each endpoint. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
+
+**Install a release archive** from the [private releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon or `linux-aarch64` for 64-bit ARM Linux (Debian 12 build). From the download directory:
+
+```sh
+archive="edgewalker-0.2.0-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).tar.gz"
+case "$(uname -s)" in
+  Darwin) shasum -a 256 -c "$archive.sha256" ;;
+  Linux) sha256sum -c "$archive.sha256" ;;
+esac
+```
+
+After the checksum reports OK, extract and check the installation:
+
+```sh
+tar -xzf "$archive"
+cd "${archive%.tar.gz}"
+python3 --version
+./bin/edgewalker-native --version
+./edgewalker calibrate --help
+```
+
+**Build from source** on a Linux or macOS host with Git, make, a C linker, Python 3.11+ and a current stable Rust toolchain with Cargo. On macOS the Command Line Tools provide make and the linker. On Debian-family Linux the `build-essential` package provides them. From a shell authenticated to the private repository:
+
+```sh
+git clone --branch v0.2.0 https://github.com/wattsie/EdgeWalker.git
+cd EdgeWalker
+make build
+./target/release/edgewalker-native --version
+./edgewalker calibrate --help
+```
+
+## First calibration
+
+For a localhost check, start the server in one terminal. Generate the key once in a new private directory. For later runs, reuse that file.
+
+```sh
+(umask 077 && mkdir -m 700 lab && ./edgewalker keygen > lab/config.json) &&
+  ./edgewalker server --config lab/config.json --listen 127.0.0.1:5207 --capacity 400000
+```
+
+Open a second terminal in the same installation directory. This example allows up to 400 kbps forward and 200 kbps return over a total of ten minutes.
+
+```sh
+./edgewalker calibrate --config lab/config.json --connect 127.0.0.1:5207 \
+  --forward-max 400000 --return-max 200000 --duration 600 --output calibration-01
+```
+
+Read `calibration-01/evidence.json` before applying `plan.json`. Exit 2 with completed evidence files means at least one direction lacked support for a tuning change. Invalid command syntax can also exit 2. Apply the plan in a fresh run and inspect the report:
+
+```sh
+./edgewalker run --config lab/config.json --connect 127.0.0.1:5207 --mode udp \
+  --plan calibration-01/plan.json --timing-every 0 --duration 120 --output verification-01
+./edgewalker report verification-01
+```
+
+For two hosts, install on both, securely provision the same key, bind the server to its reachable data-interface address and use that address with `--connect`. Permit the TCP control port and selected test data ports between the endpoints. Set an explicit server data-port range with `--data-ports` if required by the firewall. Choose a new output directory for each command. Ctrl-C stops the foreground server. To uninstall an extracted copy, stop its processes and remove its directory after saving the records and key you intend to keep.
+
 ## Run a measurement
 
-From the source checkout, run `make build` to build the Rust engine. With an extracted arm64 preview package, run the included `./edgewalker` launcher directly. Both use Python 3. Forward traffic travels from the server to the client. Return traffic travels from the client to the server.
+From the source checkout, run `make build` to build the Rust engine. With an extracted arm64 release package, run the included `./edgewalker` launcher directly. Both use Python 3.11 or later. Forward traffic travels from the server to the client. Return traffic travels from the client to the server.
 
 - [First authenticated measurement](docs/operator.md#local-measurement) and [saved results](docs/operator.md#records-and-verification)
 - [Test recipes](docs/operator.md#test-recipes) for forward UDP, return TCP, simultaneous combined traffic, loss recovery, a capacity change, and a bounded four-flow high-rate run
@@ -19,8 +79,8 @@ Run these commands from the project root. Building uses the Rust/Cargo toolchain
 | Command | Result |
 |---|---|
 | `make build` | Builds the release engine under `target/release/`. |
-| `make check` | Checks formatting and Clippy, runs locked Rust tests, builds the debug engine, and runs the Python offline, native-loopback and operator-loopback suites. |
-| `make package` | Builds the host release engine, writes a preview archive and SHA-256 file to `dist/`, and tests the extracted archive with a bounded authenticated localhost measurement. |
+| `make check` | Checks formatting and Clippy, runs locked Rust tests, builds the debug engine, and runs the Python offline, native, operator and calibration loopback suites. |
+| `make package` | Builds the host release engine, writes a versioned archive and SHA-256 file to `dist/`, and tests the extracted archive with a bounded authenticated localhost measurement. |
 | `python3 -B scripts/package.py --output DIR` | Packages an existing host build. `--output` is required. `--engine FILE` selects a binary instead of `target/release/edgewalker-native`. `--cargo-metadata FILE` supplies locked dependency metadata for the license inventory, including vendored builds. `-h` or `--help` shows usage. Use a fresh output directory to preserve any earlier archive with that version. |
 
 ## Offline controller replay

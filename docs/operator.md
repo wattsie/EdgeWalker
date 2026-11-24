@@ -1,6 +1,6 @@
 # Running EdgeWalker
 
-Use a local package or build the native engine with `cargo build --release --locked` from the repository root. The launcher uses Python 3 and its standard library. The package includes the native engine for the platform in its filename. Run `./edgewalker run --help` for client options and `./edgewalker server --help` for server options.
+Follow the [installation and first calibration instructions](../README.md#install) on each endpoint. Use a local package or build the native engine with `cargo build --release --locked` from the repository root. The supported setup uses Python 3.11 or later and its standard library. The package includes the native engine for the platform in its filename. Run `./edgewalker run --help` for client options and `./edgewalker server --help` for server options.
 
 [Test recipes](#test-recipes) give bounded examples. The [command reference](#command-reference) lists every operator command, native option and live JSON plan field.
 
@@ -133,7 +133,7 @@ Within about five seconds, start the server in a second terminal:
 ./edgewalker server --config lab/config.json --listen 127.0.0.1:5208 --capacity 1000000
 ```
 
-For a candidate with initial-offline recovery, expect the original client to record a gap, authenticate when the server comes online and write fresh receiver windows before its original deadline. Inspect `./edgewalker report run-offline` and `events.csv`. If the server stays offline for the full candidate run, expect a failure with zero receiver windows. The original 0.1.0 preview exited on initial connection refusal; see the version in the run manifest when comparing results. Stop the example server after the client finishes.
+With initial-offline recovery, expect the original client to record a gap, authenticate when the server comes online and write fresh receiver windows before its original deadline. Inspect `./edgewalker report run-offline` and `events.csv`. If the server stays offline for the full run, expect a failure with zero receiver windows. Stop the example server after the client finishes.
 
 ### Four-flow forward TCP near 2.5 Gbps
 
@@ -165,13 +165,14 @@ A report reads an existing run directory and prints JSON, including recorded cov
 
 ## Command reference
 
-`./edgewalker --help` lists the five launcher commands. Every launcher command accepts `-h` and `--help`. Place a command's options after its name. Integer rates below are **application bits per second** in decimal units, so 400 kbps is `400000`. Every run needs at least one positive directional maximum.
+`./edgewalker --help` lists the six launcher commands. Every launcher command accepts `-h` and `--help`. Place a command's options after its name. Integer rates below are **application bits per second** in decimal units, so 400 kbps is `400000`. Every run needs at least one positive directional maximum.
 
 | Command | Inputs and output |
 |---|---|
 | `keygen` | Prints a JSON object containing one random 16-character key to stdout. Redirect once to a private file. Its native parser accepts global `--config` and `--key`, but key generation does not read either value. |
 | `server` | Starts a foreground native listener and prints its bound control address as JSON. Keep it running for the test. |
 | `run` | Authenticates the client, obtains capacity, adjusts the offer from receiver feedback and records results in a new directory. |
+| `calibrate` | Runs bounded UDP calibration and writes a compatible plan and per-setting evidence. See [automatic UDP calibration](#automatic-udp-calibration). |
 | `report PATH [--html FILE]` | `PATH` is the run directory containing `session.json`. Prints reconstructed JSON. `--html` also writes a standalone HTML file at a new path; an existing file causes an error. |
 | `replay PATH` | `PATH` is a synthetic replay JSON file containing `session`, `directions` and `events`. Prints JSON lines in decision order. |
 
@@ -179,7 +180,7 @@ A report reads an existing run directory and prints JSON, including recorded cov
 
 | Option | Scope and behavior |
 |---|---|
-| `--config PATH` | On `server` and `run`, selects a JSON file containing a string field named `key`. With no flag, lookup order is `EDGEWALKER_CONFIG`, `$XDG_CONFIG_HOME/edgewalker/config.json` when set, then `~/.config/edgewalker/config.json`. Provision the same lab key at each endpoint. |
+| `--config PATH` | On `server`, `run` and `calibrate`, selects a JSON file containing a string field named `key`. With no flag, lookup order is `EDGEWALKER_CONFIG`, `$XDG_CONFIG_HOME/edgewalker/config.json` when set, then `~/.config/edgewalker/config.json`. Provision the same lab key at each endpoint. |
 | `--key KEY` | On `server` and `run`, overrides config lookup for this invocation. Accepts 12–16 characters. A literal command-line value can appear in process listings or shell history. The examples use a config file. |
 | `--listen IP:PORT` | Required for `server`. Numeric socket address on the local host. Use port 0 to select an available port and read the emitted `listening` value. Use brackets around an IPv6 literal, e.g. `[::1]:5207`. |
 | `--capacity BPS` | Sets the aggregate capacity of **each** server pool across its concurrent sessions. Supply this or both `--tx` and `--rx`. |
@@ -198,7 +199,7 @@ A report reads an existing run directory and prints JSON, including recorded cov
 | `--forward-max BPS`, `--return-max BPS` | Hard ceilings for server→client and client→server respectively. Omission or zero disables bulk in that direction unless a plan enables it. At least one direction must be active. A one-way UDP timing test can still reserve opposite-direction reply capacity. |
 | `--forward-start BPS`, `--return-start BPS` | Initial offer for that direction and restart rate after a fresh session or readiness restart. Positive and no greater than the corresponding maximum. Each defaults to that maximum. An explicit start overrides the plan's start. |
 | `--duration SECONDS` | Positive wall-clock seconds up to 1 billion, fractional values accepted. Includes authentication, measurement and retries across sessions. Omit to run until an operator stop. |
-| `--window-ms MS` | Base native measurement interval, 250–10000 ms, default 5000. Per-direction packet budgets may impose a smaller maximum. Some UDP windows extend to qualify low rates or a new offer, and the final window may shorten to meet the deadline. |
+| `--window-ms MS` | Base native measurement interval, 250–10000 ms, defaulting to the common plan window when supplied or 5000 otherwise. Per-direction packet budgets may impose a smaller maximum. Some UDP windows extend to qualify low rates or a new offer, and the final window may shorten to meet the deadline. |
 | `--udp-size BYTES` | UDP record size including its measurement header, 128–9000 bytes, default 1000. Choose a size the path MTU supports. The window budget uses the smaller of this value and 1000, including TCP mode. |
 | `--timing-every N` | Default 32. Request a UDP timing reply once per N data records. Zero disables these replies. Applies to UDP and combined mode. Timing replies use the directional budget. |
 | `--flow-limit N` | Maximum prepared TCP connections for a session and default allowed active count per direction, 1–16, default 4. Per-direction plan settings can override it. The engine provisions the largest active direction's limit. |
@@ -220,6 +221,7 @@ Each top-level key names an active direction (`forward` or `return`). Fields bel
 |---|---|
 | `ceiling_bps`, `start_bps` | Positive integer admission ceiling and starting offer. Supply a ceiling via the plan or matching CLI flag. The default start is the ceiling. |
 | `ramp_step_bps`, `probe_step_bps` | Positive offered-rate increments during ramp and upward probing. Defaults are half and one tenth of the initial CLI-derived offer, rounded down, each at least 1 bps. |
+| `feedback_ms` | Requested feedback interval per direction, 250 to 10000 ms. Defaults to the base window. The shorter request governs a shared bidirectional exchange. |
 | `window_ms`, `min_packets` | Minimum clean observation time and UDP sent-packet count. Positive integers; defaults are the base `--window-ms` and 3 packets. Partial windows can still provide loss evidence. |
 | `early_loss_count` | Number of confirmed UDP losses that may trigger early backoff ahead of the clean-window gates. Positive integer, default 3. |
 | `settle_ms`, `probe_ms` | Settling time after an offer change, default 0; minimum time before another upward probe becomes eligible, default 10000. Both in ms. Settle can be zero; probe must be positive. |
@@ -246,3 +248,36 @@ printf '%s\n' '{"id":1,"ms":500,"rates":{"forward":400000,"reverse":0},"flows":{
   ./bin/edgewalker-native client --config lab/config.json \
     --connect 127.0.0.1:5207 --mode udp --forward-max 400000
 ```
+
+## Automatic UDP calibration
+
+Start an authenticated EdgeWalker server on the receiving host with capacity for each requested direction. On the client, choose the control endpoint, directional maxima in bits per second and a total duration in seconds. Both hosts need a matching local key. The following example uses localhost, a 400 kbps forward ceiling and a 200 kbps return ceiling.
+
+```sh
+./edgewalker server --config lab/config.json --listen 127.0.0.1:5207 --capacity 400000
+# In another terminal
+./edgewalker calibrate --connect 127.0.0.1:5207 --config lab/config.json \
+  --forward-max 400000 --return-max 200000 --duration 600 --output calibration-01
+./edgewalker run --mode udp --connect 127.0.0.1:5207 --config lab/config.json \
+  --plan calibration-01/plan.json --timing-every 0 \
+  --duration 120 --output verification-01
+```
+
+Calibration measures each requested direction separately. Five fresh authenticated runs per direction share the wall-clock budget. A low-load baseline starts at one quarter of the ceiling. A reference run uses provisional defaults, then a candidate run exercises settings derived from receiver evidence. Two new sessions compare defaults and the frozen candidate. The client receives no impairment schedule. Each session uses the normal feedback, readiness, admission and deadline handling. Timing replies are disabled to avoid consuming an unspecified reverse-direction budget. The measured feedback turnaround includes the observation interval, receiver drain and control path.
+
+Use a new output directory for each calibration. Each phase saves its plan, session records and log. Compare `measurements.json` for window-weighted receiver goodput, sequence counts, feedback holds, suspensions and controller decisions. `evidence.json` records the decision for each configurable setting. `plan.json` contains caps, starting rates, observation windows and accepted overrides. An exit status of 2 indicates insufficient evidence in at least one direction. Inspect each direction before applying the plan. The run command uses the common observation window in the plan unless you explicitly set `--window-ms`. A shorter calibration may yield too few clean windows. Values verified together have bundle-level empirical support over these sessions. The comparison does not establish individual parameter causality or a probability of success on a different path.
+
+A directional plan may set `feedback_ms` (250–10000 ms) independently of the clean observation gate `window_ms`. Native reports describe both active directions in a single exchange. A bidirectional run uses the shorter requested cadence and records the actual send interval. Low-rate sample collection, probe settling and the deadline can change individual intervals. Calibration considers the observed round-trip reporting cost and caps the proposal to the native packet budget.
+
+For Python integration, put the checkout or extracted package's `src` directory on the module search path and call `calibrate.calibrate_link(connect=..., output=..., duration=..., forward_max=..., return_max=..., config=...)`. Rates are integer bits per second. The function returns the exit code, plan and per-setting evidence. `calibration.json` records the budget, elapsed time, guardrails and comparison thresholds. The quarter-cap start and chosen window are launch settings. Only settings labelled `verified_bundle` passed the empirical tuning gates.
+
+With just endpoints, maxima and duration, the calibrator selects a common measurement window of up to five seconds within the native packet budget. A 1 Gbps maximum selects 800 ms. Override it only when a particular observation interval is needed for comparison.
+
+For a bounded ceiling diagnostic, add `--check-ceiling`. This reserves a sixth session per direction within the same total duration. Its first offer equals the operator's maximum and normal receiver-driven backoff applies immediately. The diagnostic uses the default controller and contributes no evidence to parameter selection. Compare the `ceiling_check` series for requested, actual sent and receiver-delivered rates across consecutive windows. Starting at a high ceiling can produce substantial load on the first window.
+
+
+### Interpreting the calibration evidence
+
+In the pre-release four-endpoint validation, a low-rate calibration detected an induced outage within 0.74 to 1.46 seconds. Defaults took 5.94 to 6.34 seconds. Swapping the plans between paths showed mixed throughput recovery. Some directions kept their defaults. Treat the evidence as specific to the direction, load, controller and path tested.
+
+At a 1 Gbps forward ceiling, one 800 ms window sent 1 Gbps and delivered 969.17 Mbps. Sequence loss triggered backoff. The reverse diagnostic requested 1 Gbps but actually sent 410.88 Mbps in its first window. Neither direction sustained three consecutive windows within 10% of the ceiling. Inspect actual send rate, receiver goodput, sequence coverage and whole-run throughput alongside the requested offer.

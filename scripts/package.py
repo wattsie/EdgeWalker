@@ -59,6 +59,12 @@ def dependency_notices(tmp, metadata_path):
     return [(inventory, "third-party/dependencies.json"), *files]
 
 
+def archive_metadata(member):
+    member.uid = member.gid = 0
+    member.uname = member.gname = ""
+    return member
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -78,6 +84,9 @@ def main():
     )
     args.output.mkdir(parents=True, exist_ok=True)
     dest = args.output / (name + ".tar.gz")
+    checksum = dest.with_suffix(dest.suffix + ".sha256")
+    if dest.exists() or checksum.exists():
+        parser.error("an archive or checksum already exists; choose a fresh output directory")
     with tempfile.TemporaryDirectory(dir=args.output) as tmp:
         archive = Path(tmp) / (name + ".tar.gz")
         with tarfile.open(archive, "w:gz") as t:
@@ -92,6 +101,7 @@ def main():
                     (ROOT / "src" / f, "src/" + f)
                     for f in [
                         "operator_cli.py",
+                        "calibrate.py",
                         "replay.py",
                         "records.py",
                         "telemetry.py",
@@ -103,7 +113,7 @@ def main():
                     for p in sorted((ROOT / "examples").glob("*.json"))
                 ],
             ]:
-                t.add(src, name + "/" + target, recursive=False)
+                t.add(src, name + "/" + target, recursive=False, filter=archive_metadata)
         with tarfile.open(archive) as t:
             # Smoke-test only the regular files just placed under this package
             # root. Bookworm build images may predate tarfile extraction filters.
@@ -173,9 +183,10 @@ def main():
                 server.terminate()
                 server.wait(timeout=5)
                 server.stdout.close()
-        archive.replace(dest)
+        os.link(archive, dest)  # Keep a concurrent or earlier package intact.
     digest = hashlib.sha256(dest.read_bytes()).hexdigest()
-    dest.with_suffix(dest.suffix + ".sha256").write_text(f"{digest}  {dest.name}\n")
+    with checksum.open("x") as receipt:
+        receipt.write(f"{digest}  {dest.name}\n")
     print(dest)
 
 
