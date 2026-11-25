@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from statistics import median_high
 
+from live_menu import LiveMenu, OperatorStop, setup
 from html_report import write_html
 from records import Records, report, timestamp
 from replay import Direction, integer, replay
@@ -47,6 +48,10 @@ class PeerOffline(ConnectionError):
     """The initial control socket could not reach its peer."""
 
 
+class DataSetupTimeout(ConnectionError):
+    """An authenticated session timed out during UDP reachability setup."""
+
+
 class Native:
     def __init__(self, command):
         self.process = subprocess.Popen(
@@ -70,6 +75,8 @@ class Native:
                 raise ValueError("native response too large")
         line, self.buffer = self.buffer.split(b"\n", 1)
         message = json.loads(line)
+        if message.get("status") == "data_setup_timeout":
+            raise DataSetupTimeout("admitted UDP path did not confirm readiness")
         if message.get("status") == "peer_offline":
             raise PeerOffline("control endpoint unavailable")
         return message
@@ -404,8 +411,9 @@ class LiveDirection:
         )
 
 
-def plan(args):
-    overrides = json.loads(args.plan.read_text()) if args.plan else {}
+def plan(args, overrides=None):
+    if overrides is None:
+        overrides = json.loads(args.plan.read_text()) if args.plan else {}
     if not isinstance(overrides, dict) or set(overrides) - set(DIRECTIONS):
         raise ValueError("plan must contain forward and/or return objects")
     settings = {}
@@ -525,6 +533,7 @@ def run(args):
     if args.tcp_send_buffer is not None and not 8192 <= args.tcp_send_buffer <= 4194304:
         raise ValueError("TCP send buffer must be 8192..4194304 bytes")
     settings = plan(args)
+    menu = LiveMenu(settings, args.mode) if getattr(args, "interactive", False) else None
     binary = engine_path()
     config = ["--config", str(args.config)] if args.config else []
     if args.tcp_send_buffer is not None:
@@ -563,7 +572,7 @@ def run(args):
         dict(
             run_id=str(uuid.uuid4()),
             mode=args.mode,
-            settings=settings,
+            settings=copy.deepcopy(settings),
             stop_acknowledged=False,
             connect=args.connect,
             duration_s=args.duration,
@@ -595,6 +604,14 @@ def run(args):
     backoff = 0.5
     measured_windows = 0
     resume = threading.Event()
+    def record_edit(kind, direction, value):
+        rec.event(kind, elapsed(), direction, value)
+
+    def poll_disconnected():
+        nonlocal end
+        if menu:
+            end = menu.poll({}, settings, end, record_edit, None, resume, None)
+
     previous_signal = signal.signal(signal.SIGUSR1, lambda *_: resume.set())
     try:
         if args.interface:
@@ -604,6 +621,7 @@ def run(args):
             monitor.thread.start()
         while time.monotonic() < end:
             try:
+                poll_disconnected()
                 proc = Native(command)
                 ready = proc.read(min(end, time.monotonic() + setup_seconds))
                 if ready.get("status") != "ready":
@@ -615,7 +633,43 @@ def run(args):
                 session_window = 0
                 report_overhead_ms = 0
                 active = {n: LiveDirection(s, args.mode) for n, s in settings.items()}
+                def resize(requested):
+                    if not ready.get("resize"):
+                        raise ValueError("gateway does not support live resizing")
+                    proc.write({"resize": {"forward": requested.get("forward", 0),
+                                           "reverse": requested.get("return", 0)}})
+                    reply = proc.read(min(end, time.monotonic() + 10))
+                    if reply.get("resize") != "Accepted":
+                        rec.event("operator_reservation_rejected", elapsed(), detail=reply.get("resize"))
+                        raise ValueError(f"gateway rejected reservation: {reply.get('resize')}")
+                    for d in DIRECTIONS:
+                        command[command.index("--" + d + "-max") + 1] = str(requested.get(d, 0))
+
+                def validate_edit(direction, changes):
+                    test_args = copy.copy(args)
+                    for d in DIRECTIONS:
+                        setattr(test_args, d + "_max", None)
+                        setattr(test_args, d + "_start", None)
+                    cfg = {k: v for k, v in settings[direction].items() if k not in ("udp_size", "delay_policy")}
+                    cfg.update(changes)
+                    checked = plan(test_args, {direction: cfg})[direction]
+                    if checked["hold_ms"] <= checked["feedback_ms"] + 500:
+                        raise ValueError("hold timer must accommodate feedback and drain")
+                    if "feedback_ms" in changes or "start_bps" in changes:
+                        rate = min(active[direction].c.rate, checked["start_bps"])
+                        tcp = rate - rate // 10 if args.mode == "combined" else rate
+                        udp = rate // 10 if args.mode == "combined" else rate
+                        interval = min([checked["feedback_ms"]] + [
+                            s["feedback_ms"] for n, s in settings.items() if n != direction])
+                        if ((args.mode != "udp" and tcp // active[direction].flows * interval < 8000000)
+                            or (args.mode != "tcp" and udp * interval < args.udp_size * 8000)):
+                            raise ValueError("feedback interval or starting rate too small for active streams")
+                    return checked
+
                 while time.monotonic() < end:
+                    if menu:
+                        end = menu.poll(active, settings, end, record_edit,
+                                       resize, resume, validate_edit)
                     if resume.is_set():
                         resume.clear()
                         proc.ready(session_window, end)
@@ -872,6 +926,9 @@ def run(args):
                         last_probe = probes[0]
                     for n, row in pending_rows.items():
                         rec.series(n, row)
+                        if menu:
+                            print(f"{n}: offered {row['offer_bps']} bps, delivered {row['delivered_bps']} bps, "
+                                  f"TCP flows {row['tcp_flows']}", file=sys.stderr)
                         rec.event(row["reason"], stop, n, row["next_bps"])
                     if pending_rows:
                         measured_windows += 1
@@ -888,15 +945,19 @@ def run(args):
                     proc = None
                 if time.monotonic() >= end:
                     break
-                if rec.manifest["sessions"] == 0 and not isinstance(exc, (PeerOffline, Deadline)):
+                if rec.manifest["sessions"] == 0 and not isinstance(exc, (PeerOffline, Deadline, DataSetupTimeout)):
                     raise
                 if args.manual_resume and rec.manifest["sessions"]:
                     rec.event("manual_resume_required", elapsed())
                     while not resume.is_set() and time.monotonic() < end:
-                        resume.wait(min(1, max(0, end - time.monotonic())))
+                        poll_disconnected()
+                        resume.wait(min(0.25, max(0, end - time.monotonic())))
                     resume.clear()
                 rec.event("replacement_wait", elapsed(), detail=backoff)
-                time.sleep(min(backoff, max(0, end - time.monotonic())))
+                retry_at = time.monotonic() + backoff
+                while time.monotonic() < min(retry_at, end):
+                    poll_disconnected()
+                    time.sleep(min(0.25 if menu else backoff, max(0, min(retry_at, end) - time.monotonic())))
                 backoff = min(8, 2 * backoff)
         if not measured_windows:
             status, reason = "failed", "no_receiver_windows"
@@ -907,6 +968,13 @@ def run(args):
             "deadline",
         )
         return 0
+    except OperatorStop:
+        status, reason = "interrupted", "operator_stop"
+        if proc:
+            rec.manifest["stop_acknowledged"] = proc.close(orderly=True)
+            proc = None
+        rec.event("operator_stop", elapsed())
+        return 130
     except KeyboardInterrupt:
         status, reason = "interrupted", "operator_stop"
         rec.event("coverage_gap", elapsed(), detail="interrupted window")
@@ -928,7 +996,17 @@ def run(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="edgewalker")
+    argv = sys.argv[1:]
+    interactive = argv[:1] in (["-m"], ["--menu"])
+    if interactive:
+        argv = ["run", *argv[1:]]
+    elif argv[:1] in (["-s"], ["--server"]):
+        argv = ["server", *argv[1:]]
+    elif argv and argv[0].startswith("-") and argv[0] not in ("--help", "-h"):
+        argv = ["run", *argv]
+    parser = argparse.ArgumentParser(prog="edgewalker", epilog=(
+        "Use --connect for a client, -s/--server for the gateway, or -m/--menu for interactive setup."
+    ))
     sub = parser.add_subparsers(dest="action", required=True)
     from calibrate import add_command, calibrate
     add_command(sub)
@@ -942,9 +1020,9 @@ def main():
                 "--html", type=Path, help="write a new standalone HTML report"
             )
     p = sub.add_parser("run")
-    p.add_argument("--connect", required=True)
-    p.add_argument("--mode", choices=["udp", "tcp", "combined"], required=True)
-    p.add_argument("--output", required=True, type=Path)
+    p.add_argument("--connect", required=not interactive)
+    p.add_argument("--mode", choices=["udp", "tcp", "combined"], required=not interactive)
+    p.add_argument("--output", required=not interactive, type=Path)
     p.add_argument(
         "--duration", type=float, help="wall-clock seconds including setup and recovery"
     )
@@ -990,10 +1068,20 @@ def main():
     for n in DIRECTIONS:
         p.add_argument("--" + n + "-max", type=int)
         p.add_argument("--" + n + "-start", type=int)
-    if sys.argv[1:2] in (["server"], ["keygen"]):
+    if not argv:
+        parser.print_help()
+        return 0
+    if argv[:1] in (["server"], ["keygen"]):
         binary = engine_path()
-        os.execv(binary, [binary, *sys.argv[1:]])
-    args = parser.parse_args()
+        os.execv(binary, [binary, *argv])
+    args = parser.parse_args(argv)
+    args.interactive = interactive
+    if interactive:
+        try:
+            if not setup(args, p):
+                return 0
+        except (EOFError, KeyboardInterrupt):
+            return 130
     if args.action == "calibrate":
         signal.signal(signal.SIGTERM, signal.default_int_handler)
         return calibrate(args)

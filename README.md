@@ -12,11 +12,24 @@ Follow the test from Site A to Site B. The solid blue line shows the rate Site A
 
 The Rust engine handles network traffic. Python manages sessions, replays receiver feedback and writes reports. See the [design brief](docs/brief.md) for the requirements and [third-party notices](third-party/dependencies.json) for dependency licenses.
 
+## Interactive client on the dynamic branch
+
+Build this checkout with `make build`. At the gateway use `./edgewalker --server` with your usual server options. At the satellite site, run `./edgewalker --menu` to set up a test, or start with your usual client options after `--menu`. With a configured key at each site:
+
+```sh
+./edgewalker -s --listen 127.0.0.1:5000 --capacity 400000
+# In another terminal
+./edgewalker -m --connect 127.0.0.1:5000 --mode tcp --forward-start 100000 \
+  --forward-max 200000 --flows 1 --flow-limit 2 --duration 60 --output menu-test
+```
+
+Press Enter after each command. Try `flows forward 2` to measure two TCP connections sharing the offer. Type `status` to inspect the offer and ceilings. Each completed window displays the measured delivery. The [operator guide](docs/operator.md#interactive-operation) describes live edits. For scripted runs, omit `--menu` and specify client options directly, or use the existing `run` command.
+
 ## Install
 
 Use Python 3.11 or later on each endpoint. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
 
-**Install a release archive** from the [private releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon or `linux-aarch64` for 64-bit ARM Linux (Debian 12 build). From the download directory:
+**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon or `linux-aarch64` for 64-bit ARM Linux (Debian 12 build). From the download directory:
 
 ```sh
 archive="edgewalker-0.2.0-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).tar.gz"

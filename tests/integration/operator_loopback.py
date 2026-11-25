@@ -3,6 +3,7 @@
 import csv
 import json
 import os
+import pty
 from pathlib import Path
 import secrets
 import signal
@@ -72,6 +73,71 @@ class OperatorLoopback(unittest.TestCase):
             if time.monotonic() - start > 6:
                 self.fail("no measured window")
             time.sleep(0.05)
+
+    def test_menu_live_edits_and_authenticated_resize(self):
+        master, slave = pty.openpty()
+        self.addCleanup(os.close, master)
+        self.addCleanup(os.close, slave)
+        out = self.work / "menu"
+        proc = subprocess.Popen([
+            CLI, "--menu", "--connect", self.addr, "--mode", "tcp", "--duration", "40",
+            "--window-ms", "500", "--forward-start", "100000", "--forward-max", "200000",
+            "--flows", "1", "--flow-limit", "2", "--output", out,
+        ], env=self.env, stdin=slave, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(proc.kill)
+        os.write(master, b"y\n")
+        self.wait_rows("menu")
+        for edit, expected in (
+            ("reserve forward 1100000", "operator_reservation_rejected"),
+            ("reserve forward 350000", "operator_reservation_confirmed,350000"),
+            ("limit forward 300000", "operator_limit,300000"),
+            ("flows forward 2", "operator_flows,2"),
+            ("rate forward 250000", "operator_rate,250000"),
+            ("reserve forward 180000", "operator_limit,180000"),
+            ("set forward probe_ms 9000", "operator_set_probe_ms,9000"),
+            ("remaining 2", "operator_remaining_seconds,2"),
+        ):
+            os.write(master, (edit + "\n").encode())
+            deadline = time.monotonic() + 5
+            while expected not in (out / "events.csv").read_text():
+                if time.monotonic() > deadline or proc.poll() is not None:
+                    self.fail(f"missing event after {edit}")
+                time.sleep(.04)
+        _, err = proc.communicate(timeout=6)
+        self.assertEqual(proc.returncode, 0, err)
+        manifest = json.loads((out / "session.json").read_text())
+        self.assertEqual(manifest["sessions"], 1)
+        self.assertEqual(manifest["settings"]["forward"]["ceiling_bps"], 200000)
+        with (out / "series-fl.csv").open() as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertTrue(any(r["tcp_flows"] == "2" and r["offer_bps"] == "250000"
+                            and int(r["delivered_bps"]) > 0 for r in rows))
+
+    def test_menu_stop_while_waiting_for_manual_reauthentication(self):
+        master, slave = pty.openpty()
+        self.addCleanup(os.close, master)
+        self.addCleanup(os.close, slave)
+        out = self.work / "interactive-recovery"
+        proc = subprocess.Popen([
+            CLI, "-m", "--connect", self.addr, "--mode", "tcp", "--manual-resume",
+            "--duration", "30", "--window-ms", "500", "--forward-max", "200000",
+            "--output", out,
+        ], env=self.env, stdin=slave, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(proc.kill)
+        os.write(master, b"y\n")
+        self.wait_rows("interactive-recovery")
+        self.stop_server()
+        deadline = time.monotonic() + 8
+        while "manual_resume_required" not in (out / "events.csv").read_text():
+            if time.monotonic() > deadline:
+                self.fail("no manual recovery prompt")
+            time.sleep(.05)
+        os.write(master, b"stop\n")
+        _, err = proc.communicate(timeout=4)
+        self.assertEqual(proc.returncode, 130, err)
+        manifest = json.loads((out / "session.json").read_text())
+        self.assertEqual(manifest["termination_reason"], "operator_stop")
+        self.assertEqual(manifest["sessions"], 1)
 
     def test_invalid_native_budget_before_connection(self):
         p = self.run_client("invalid", "--mode", "tcp", "--forward-max", "2350000000",

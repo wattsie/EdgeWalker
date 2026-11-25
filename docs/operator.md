@@ -22,7 +22,7 @@ In another terminal using the same configuration, run a 20-second combined-mode 
 ./edgewalker report run-01
 ```
 
-Omit a direction to disable its bulk traffic. Choose `udp`, `tcp` or `combined`. An omitted duration runs until stopped. Ctrl-C or SIGTERM closes the native client and records interruption. A dependent sender monitors the control connection during each window. Automatic recovery reauthenticates, reacquires capacity and restarts at the configured starting rates. Use `--manual-resume` to wait for SIGUSR1 before resuming after a control failure. A stop is terminal. A minimum-policy suspension also accepts SIGUSR1. A fixed run retains its original deadline.
+Omit a direction to disable its bulk traffic. Choose `udp`, `tcp` or `combined`. An omitted duration runs until stopped. Ctrl-C or SIGTERM closes the native client and records interruption. A dependent sender monitors the control connection during each window. Automatic recovery reauthenticates, reacquires capacity and restarts at the configured starting rates. Use `--manual-resume` to wait for SIGUSR1 before resuming after a control failure. A stop is terminal. A minimum-policy suspension also accepts SIGUSR1. A fixed run retains its deadline through reconnection. Interactive operators can explicitly edit the time remaining.
 
 To stop the foreground example server after the clients finish, press Ctrl-C in its terminal. The client retains its output directory for later reporting.
 
@@ -281,3 +281,26 @@ For a bounded ceiling diagnostic, add `--check-ceiling`. This reserves a sixth s
 In the pre-release four-endpoint validation, a low-rate calibration detected an induced outage within 0.74 to 1.46 seconds. Defaults took 5.94 to 6.34 seconds. Swapping the plans between paths showed mixed throughput recovery. Some directions kept their defaults. Treat the evidence as specific to the direction, load, controller and path tested.
 
 At a 1 Gbps forward ceiling, one 800 ms window sent 1 Gbps and delivered 969.17 Mbps. Sequence loss triggered backoff. The reverse diagnostic requested 1 Gbps but actually sent 410.88 Mbps in its first window. Neither direction sustained three consecutive windows within 10% of the ceiling. Inspect actual send rate, receiver goodput, sequence coverage and whole-run throughput alongside the requested offer.
+
+## Interactive operation
+
+Choose the mode with the first argument. With no arguments the launcher prints help. Use `-s` or `--server` for the gateway, `-m` or `--menu` for interactive client setup, or start with `--connect` for a scripted client. Existing subcommands work as before. A menu requires a terminal, including an SSH session with a terminal allocated. Setup accepts the client options documented above. At the Start prompt enter `edit` to choose any client option, `help` for the option list, or `y` to begin. Key entry in the setup editor suppresses echo.
+
+After startup, type one command per line. Edits are processed between measurement windows. Forward means download at the client and return means upload. An edit can wait for the current window and receiver feedback. Use Ctrl-C to interrupt during setup, measurement or reconnection.
+
+| Command | Effect |
+|---|---|
+| `status` | Show the admitted reservation, local operating ceiling, next offer, controller state and flow count per direction. |
+| `rate forward 120000` | Request this offer in bps for the next window. Automatic control then continues. |
+| `flows forward 2` | Select a fixed number of prepared TCP flows. The total offer is shared among those flows. |
+| `limit forward 150000` | Change the operating ceiling within the reservation. |
+| `reserve forward 300000` | Request a change to the reservation on a compatible gateway. The gateway checks both pools atomically. Rejection retains the previous limits. A confirmed reduction clamps the operating ceiling. A confirmed increase gives headroom for a later limit or rate edit. |
+| `set forward probe_ms 8000` | Change a directional plan field. Available fields cover starting rate, ramp/probe steps and timing, feedback and observation windows, clean and loss gates, persistent loss, delay policy, minimum rate/action and reporting target. Use the JSON field names in the plan reference. |
+| `flows forward auto` | Re-enable automatic TCP flow scaling within the prepared limit. |
+| `save new-plan.json` | Save the current directional settings for a future `--plan` run. Requires a new path. |
+| `remaining 120` or `remaining open` | Set a new wall-clock deadline from acceptance or switch to open-ended operation. |
+| `resume` | Signal readiness to resume a manually suspended direction. |
+| `stop` | End the run. |
+| `help` | Show command syntax. |
+
+Protocol, active directions, gateway, credentials, socket preparation, datagram format and output location are setup choices. Start a fresh run to change them. The event log timestamps accepted edits and reservation rejections. Window records show the effective offer, flow count and receiver delivery. The session manifest retains the launch settings.

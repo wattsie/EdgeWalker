@@ -131,6 +131,8 @@ enum Admission {
         udp: u16,
         tcp: u16,
         token: [u8; 32],
+        #[serde(default)]
+        resize: bool,
     },
     Rejected {
         requested: Rates,
@@ -162,8 +164,8 @@ impl Slot {
     fn reserve(&mut self, cap: Rates, r: Rates) -> std::result::Result<(), Admission> {
         let mut l = self.0.lock().unwrap();
         let available = Rates {
-            forward: cap.forward - l.used.forward,
-            reverse: cap.reverse - l.used.reverse,
+            forward: cap.forward - (l.used.forward - self.2.forward),
+            reverse: cap.reverse - (l.used.reverse - self.2.reverse),
         };
         if r.forward > available.forward || r.reverse > available.reverse {
             return Err(Admission::Rejected {
@@ -172,8 +174,8 @@ impl Slot {
                 available,
             });
         }
-        l.used.forward += r.forward;
-        l.used.reverse += r.reverse;
+        l.used.forward = l.used.forward - self.2.forward + r.forward;
+        l.used.reverse = l.used.reverse - self.2.reverse + r.reverse;
         self.2 = r;
         Ok(())
     }
@@ -280,9 +282,28 @@ fn bind_data<T>(
 #[derive(Serialize, Deserialize)]
 enum Request {
     Window(Window, u64),
+    Resize(Rates),
     Ready(u32),
     Stop,
 }
+fn reserved_rates(plan: &Session, rates: Rates) -> Rates {
+    let mut reservation = rates;
+    if reservation.forward == 0 {
+        reservation.forward =
+            engine::reply_rate(rates.reverse, plan.mode, plan.timing_every, plan.udp_size)
+    }
+    if reservation.reverse == 0 {
+        reservation.reverse =
+            engine::reply_rate(rates.forward, plan.mode, plan.timing_every, plan.udp_size)
+    }
+    reservation
+}
+#[derive(Serialize, Deserialize)]
+enum ResizeResult {
+    Accepted,
+    Rejected(Admission),
+}
+
 fn serve_session(
     s: TcpStream,
     key: &str,
@@ -303,7 +324,7 @@ fn serve_session(
             return Err(e);
         }
     };
-    let plan: Session = c.recv()?;
+    let mut plan: Session = c.recv()?;
     validate_session(&plan)?;
     if plan.overload_ms > allow_overload_ms {
         c.send(&Admission::OverloadDenied {
@@ -312,23 +333,7 @@ fn serve_session(
         return Ok(());
     }
     let mut remaining_overload = plan.overload_ms;
-    let mut reservation = plan.max;
-    if reservation.forward == 0 {
-        reservation.forward = engine::reply_rate(
-            plan.max.reverse,
-            plan.mode,
-            plan.timing_every,
-            plan.udp_size,
-        )
-    }
-    if reservation.reverse == 0 {
-        reservation.reverse = engine::reply_rate(
-            plan.max.forward,
-            plan.mode,
-            plan.timing_every,
-            plan.udp_size,
-        )
-    }
+    let mut reservation = reserved_rates(&plan, plan.max);
     if let Err(rejection) = slot.reserve(cap, reservation) {
         c.send(&rejection)?;
         return Ok(());
@@ -340,6 +345,7 @@ fn serve_session(
         udp: udp.local_addr()?.port(),
         tcp: listener.local_addr()?.port(),
         token,
+        resize: true,
     })?;
     // The client opens its admitted sockets in order before acknowledging the join.
     c.0.set_read_timeout(Some(join_timeout(plan.mode, plan.flow_limit)))?;
@@ -389,6 +395,24 @@ fn serve_session(
             Request::Ready(id) => {
                 ensure!(id == prev, "wrong readiness generation");
                 c.send(&id)?;
+                continue;
+            }
+            Request::Resize(rates) => {
+                ensure!(
+                    (rates.forward == 0) == (plan.max.forward == 0)
+                        && (rates.reverse == 0) == (plan.max.reverse == 0),
+                    "resize must preserve directions"
+                );
+                let wanted = reserved_rates(&plan, rates);
+                let result = match slot.reserve(cap, wanted) {
+                    Ok(()) => {
+                        plan.max = rates;
+                        reservation = wanted;
+                        ResizeResult::Accepted
+                    }
+                    Err(reason) => ResizeResult::Rejected(reason),
+                };
+                c.send(&result)?;
                 continue;
             }
             Request::Stop => break,
@@ -461,7 +485,12 @@ fn server(
     }
     Ok(())
 }
-fn client(addr: SocketAddr, plan: Session, key: &str) -> Result<()> {
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResizeInput {
+    resize: Rates,
+}
+fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
     validate_session(&plan)?;
     let sock = TcpStream::connect_timeout(&addr, Duration::from_secs(5)).inspect_err(|e| {
         if matches!(
@@ -477,8 +506,13 @@ fn client(addr: SocketAddr, plan: Session, key: &str) -> Result<()> {
     let local = sock.local_addr()?.ip();
     let mut c = Control::authenticate(sock, key, true)?;
     c.send(&plan)?;
-    let (up, tp, token) = match c.recv::<Admission>()? {
-        Admission::Ready { udp, tcp, token } => (udp, tcp, token),
+    let (up, tp, token, resize) = match c.recv::<Admission>()? {
+        Admission::Ready {
+            udp,
+            tcp,
+            token,
+            resize,
+        } => (udp, tcp, token, resize),
         r => bail!("admission rejected: {}", serde_json::to_string(&r)?),
     };
     let mut tcp = Vec::new();
@@ -500,13 +534,23 @@ fn client(addr: SocketAddr, plan: Session, key: &str) -> Result<()> {
     c.send(&"joined")?;
     if plan.mode != Mode::Tcp {
         let mut challenge = [0; 33];
-        ensure!(udp.recv(&mut challenge)? == 32, "invalid challenge");
+        let length = udp.recv(&mut challenge).inspect_err(|e| {
+            // Admission already succeeded. A lost UDP join or challenge can
+            // time out before either endpoint has measured any payload.
+            if matches!(
+                e.kind(),
+                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+            ) {
+                println!("{}", json!({"status":"data_setup_timeout"}));
+            }
+        })?;
+        ensure!(length == 32, "invalid challenge");
         c.send(&challenge[..32])?;
         udp.set_read_timeout(Some(Duration::from_millis(30)))?;
     }
     ensure!(c.recv::<String>()? == "ready", "receiver unavailable");
     c.0.set_read_timeout(Some(Duration::from_secs(15)))?;
-    println!("{}", json!({"status":"ready","version":1}));
+    println!("{}", json!({"status":"ready","version":1,"resize":resize}));
     let mut expected_peer_base = 0;
     let mut prev = 0;
     let origin = Instant::now();
@@ -518,6 +562,16 @@ fn client(addr: SocketAddr, plan: Session, key: &str) -> Result<()> {
             c.send(&Request::Ready(prev))?;
             ensure!(c.recv::<u32>()? == prev, "readiness generation mismatch");
             println!("{}", json!({"status":"ready","after":prev}));
+            continue;
+        }
+        if let Ok(edit) = serde_json::from_str::<ResizeInput>(&line) {
+            ensure!(resize, "gateway does not support resize");
+            c.send(&Request::Resize(edit.resize))?;
+            let result: ResizeResult = c.recv()?;
+            if matches!(result, ResizeResult::Accepted) {
+                plan.max = edit.resize;
+            }
+            println!("{}", json!({"resize":result}));
             continue;
         }
         let request: Option<Window> = serde_json::from_str(&line)?;
@@ -646,6 +700,28 @@ mod high_latency_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn resize_preserves_other_sessions_and_rolls_back_both_pools_on_rejection() {
+        let ip = IpAddr::from([127, 0, 0, 1]);
+        let shared = Shared::default();
+        shared.lock().unwrap().workers.insert(ip, 2);
+        let mut first = Slot(shared.clone(), ip, Rates::default());
+        let mut second = Slot(shared.clone(), ip, Rates::default());
+        let rates = |forward, reverse| Rates { forward, reverse };
+        let cap = rates(100, 90);
+        assert!(first.reserve(cap, rates(60, 30)).is_ok());
+        assert!(second.reserve(cap, rates(20, 45)).is_ok());
+        assert!(first.reserve(cap, rates(70, 50)).is_err());
+        assert_eq!(shared.lock().unwrap().used.forward, 80);
+        assert_eq!(shared.lock().unwrap().used.reverse, 75);
+        assert!(first.reserve(cap, rates(40, 15)).is_ok());
+        assert!(second.reserve(cap, rates(60, 75)).is_ok());
+        drop(first);
+        drop(second);
+        let ledger = shared.lock().unwrap();
+        assert_eq!((ledger.used.forward, ledger.used.reverse), (0, 0));
+    }
+
     #[test]
     fn typed_v1_commands_and_directional_reservations() {
         let mut input = json!({"id":1,"ms":1000,"rates":{"forward":8000,"reverse":0}});

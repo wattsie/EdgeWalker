@@ -101,6 +101,7 @@ def main():
                     (ROOT / "src" / f, "src/" + f)
                     for f in [
                         "operator_cli.py",
+                        "live_menu.py",
                         "calibrate.py",
                         "replay.py",
                         "records.py",
