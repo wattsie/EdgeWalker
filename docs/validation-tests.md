@@ -1,0 +1,129 @@
+# Validation Tests
+
+EdgeWalker satellite field guide for the interactive prerelease `0.2.1-dynamic.2`.
+
+Start with a 30-second forward TCP test to verify the route, delivery and shutdown. Then compare one TCP connection with two under the same total offer. UDP calibration is a separate, optional test. All commands run locally from the extracted package directory. Each client run needs a new output directory.
+
+## Before leaving for the site
+
+Take this file, the appropriate release archive for each host, its matching `.sha256` file, and a way to provision the shared key securely. Each host needs Python 3.11 or later. The available binaries support Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
+
+Verify and extract the matching package on each device. Run the block for that platform from the directory containing the download. Continue only if the checksum succeeds.
+
+Linux ARM64:
+
+```sh
+archive=edgewalker-0.2.1-dynamic.2-linux-aarch64.tar.gz
+sha256sum -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
+```
+
+Apple silicon:
+
+```sh
+archive=edgewalker-0.2.1-dynamic.2-darwin-arm64.tar.gz
+shasum -a 256 -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
+```
+
+On both hosts:
+
+```sh
+python3 --version
+./bin/edgewalker-native --version
+./edgewalker --menu --help
+```
+
+Expect native version `0.2.1-dynamic.2`. For a new installation, generate one key on the gateway. This command refuses to overwrite an existing file.
+
+```sh
+(umask 077 && mkdir -p lab && set -C && ./edgewalker keygen > lab/config.json)
+```
+
+Securely provision that same file at `lab/config.json` inside the satellite client's extracted directory. If credentials are already provisioned, use them. On each host run `chmod 600 lab/config.json`. Keep the key file separate from test results.
+
+## Test 1  Verify the satellite path at low load
+
+The terrestrial gateway runs the server. The satellite site runs the client and initiates the connection. **Forward** is download to the satellite site. **Return** is upload to the gateway.
+
+**Gateway terminal.** Replace the example IP with an address assigned to the gateway's test interface. Permit the satellite site's traffic to TCP control port 5207 and the selected TCP/UDP data ports 5210 through 5220. If the gateway is behind NAT, arrange forwarding for those ports and give the client the reachable address. Keep this terminal open.
+
+```sh
+GATEWAY_BIND=192.0.2.10
+./edgewalker --server --config lab/config.json \
+  --listen "$GATEWAY_BIND:5207" --data-ports 5210-5220 --capacity 1000000
+```
+
+**Satellite client terminal.** Replace the example with the reachable gateway IP. On Linux run `ip route get "$GATEWAY"`; on macOS run `route -n get "$GATEWAY"`. Check the interface and next hop against the site's routing plan. If a tunnel or alternate WAN is present, confirm traffic on the satellite WAN counters during the test.
+
+```sh
+GATEWAY=192.0.2.10
+./edgewalker run --config lab/config.json --connect "$GATEWAY:5207" \
+  --mode tcp --forward-start 1000000 --forward-max 1000000 \
+  --flows 1 --flow-limit 1 --window-ms 1000 \
+  --duration 30 --output sat-smoke-01
+./edgewalker report sat-smoke-01
+```
+
+**Proceed when** the client exits successfully, the report shows forward receiver windows and positive received bytes, and `sat-smoke-01/session.json` records deadline termination with `stop_acknowledged` true. Check the report's coverage flag and gaps. A run with no receiver windows has no measured throughput. If setup fails, check the addresses, matching keys, ports, and gateway capacity before increasing the load.
+
+## Test 2  Compare one TCP flow with two
+
+The suspected single-flow plateau is around **38 Mbps**. The example requests **60 Mbps total** to allow a measurable gain above 38 Mbps. Use 60 Mbps only if approved, or replace all three occurrences of 60000000 below with the agreed rate in bits per second. A ceiling below the suspected plateau cannot test that hypothesis. A 60 Mbps ceiling also limits the gain visible from two flows.
+
+**Gateway.** Stop the smoke-test server with Ctrl-C, then restart in the same terminal:
+
+```sh
+./edgewalker --server --config lab/config.json \
+  --listen "$GATEWAY_BIND:5207" --data-ports 5210-5220 --capacity 60000000
+```
+
+**Satellite client.** Start one fixed flow with a second socket prepared:
+
+```sh
+./edgewalker --menu --config lab/config.json --connect "$GATEWAY:5207" \
+  --mode tcp --forward-start 60000000 --forward-max 60000000 \
+  --flows 1 --flow-limit 2 --window-ms 1000 \
+  --duration 180 --output sat-tcp-01
+```
+
+Enter `y` at the Start prompt. Watch one-flow delivery until it settles across several fresh windows. Then enter this line in the running menu and press Enter:
+
+```text
+flows forward 2
+```
+
+Use `status` to inspect the current settings. Confirm that a subsequent measured row shows two flows. Compare settled rows with the same actual offered load and record how long each phase took to stabilize. Retain startup and transition rows separately. Let the deadline end the run, or enter `stop` to finish early. Ctrl-C interrupts the client during setup or recovery.
+
+```sh
+./edgewalker report sat-tcp-01
+```
+
+In `series-fl.csv`, compare `offer_bps`, `actual_offer_bps`, `delivered_bps`, `tcp_flows` and retransmissions. The edit time is in `events.csv`. Per-flow counters and available kernel TCP statistics are in `windows.jsonl`. Active-window goodput excludes setup and pauses. To assess whole-run throughput, divide total receiver payload bits by elapsed wall time.
+
+If total delivery rises beyond the single-flow plateau with the same offer, parallel flows helped under those conditions. If both flows share roughly the original total, investigate a shared limit. Record RTT, sender congestion window, advertised receive window if available, retransmissions, and any satellite acceleration or proxy. At 700 ms RTT, 38 Mbps corresponds to about 3.3 million bytes in flight. Throughput alone cannot identify which limit caused the plateau.
+
+## Test 3  Calibrate UDP if needed
+
+Run calibration when you want directional UDP controller settings. The TCP comparison above can run independently. This example allows 400 kbps forward and 200 kbps return for a total wall-clock budget of ten minutes. Either gateway capacity used above can admit it when capacity is available. Confirm the UDP data-port range is reachable.
+
+**Satellite client:**
+
+```sh
+./edgewalker calibrate --config lab/config.json --connect "$GATEWAY:5207" \
+  --forward-max 400000 --return-max 200000 \
+  --duration 600 --output sat-calibration-01
+```
+
+Retain `sat-calibration-01/plan.json` and `evidence.json` together. Inspect the setting evidence for each direction. Exit status 2 can indicate insufficient evidence. Unsupported adjustments remain at their provisional values. If desired, exercise the resulting plan in a separate two-minute UDP run:
+
+```sh
+./edgewalker run --config lab/config.json --connect "$GATEWAY:5207" \
+  --mode udp --plan sat-calibration-01/plan.json --timing-every 0 \
+  --duration 120 --output sat-udp-verification-01
+./edgewalker report sat-udp-verification-01
+```
+
+## Finish and retain evidence
+
+After the last test, stop the foreground gateway server with Ctrl-C. Check that the trial listener has closed (Linux `ss -ltn`, macOS `lsof -nP -iTCP:5207 -sTCP:LISTEN`) and that satellite WAN traffic returns to its prior level. Remove any temporary forwarding or firewall access arranged for the trial.
+
+Keep each complete results directory, the package versions, approved caps, the route used, and the approximate UTC time of any visible outage or flow-count edit. Missing feedback is a coverage gap. Retain failed runs alongside their repeats. This guide and the result files can be read offline.

@@ -25,6 +25,8 @@ Build this checkout with `make build`. At the gateway use `./edgewalker --server
 
 Press Enter after each command. Try `flows forward 2` to measure two TCP connections sharing the offer. Type `status` to inspect the offer and ceilings. Each completed window displays the measured delivery. The [operator guide](docs/operator.md#interactive-operation) describes live edits. For scripted runs, omit `--menu` and specify client options directly, or use the existing `run` command.
 
+For a live satellite trial using the interactive prerelease, take the [offline validation tests](docs/validation-tests.md) to both sites. The guide covers the gateway, client, optional calibration and cleanup.
+
 ## Install
 
 Use Python 3.11 or later on each endpoint. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.

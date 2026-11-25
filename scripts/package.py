@@ -97,6 +97,7 @@ def main():
                 (ROOT / "README.md", "README.md"),
                 (ROOT / "docs/brief.md", "docs/brief.md"),
                 (ROOT / "docs/operator.md", "docs/operator.md"),
+                (ROOT / "docs/validation-tests.md", "docs/validation-tests.md"),
                 *[
                     (ROOT / "src" / f, "src/" + f)
                     for f in [
