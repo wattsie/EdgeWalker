@@ -533,6 +533,8 @@ def run(args):
         config_buffer = []
     if args.key is not None:
         config += ["--key", args.key]
+    prepared_flows = max(s["flow_limit"] for s in settings.values())
+    setup_seconds = 12 + (3 * prepared_flows if args.mode != "udp" else 0)
     command = [
         binary,
         *config,
@@ -547,7 +549,7 @@ def run(args):
         "--timing-every",
         str(args.timing_every),
         "--flow-limit",
-        str(max(s["flow_limit"] for s in settings.values())),
+        str(prepared_flows),
     ]
     if args.overload_ms:
         command += ["--overload-ms", str(args.overload_ms)]
@@ -603,7 +605,7 @@ def run(args):
         while time.monotonic() < end:
             try:
                 proc = Native(command)
-                ready = proc.read(min(end, time.monotonic() + 12))
+                ready = proc.read(min(end, time.monotonic() + setup_seconds))
                 if ready.get("status") != "ready":
                     raise ConnectionError("receiver unavailable")
                 rec.manifest["stop_acknowledged"] = False

@@ -195,9 +195,22 @@ fn validate_session(plan: &Session) -> Result<()> {
     Ok(())
 }
 
+const DATA_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+
+fn join_timeout(mode: Mode, flows: u64) -> Duration {
+    let connections = if mode == Mode::Udp { 0 } else { flows };
+    Duration::from_secs(5) + DATA_CONNECT_TIMEOUT * connections as u32
+}
+
+fn tcp_write_timeout(srtt_us: u64) -> Duration {
+    Duration::from_micros(srtt_us.saturating_mul(3))
+        .clamp(Duration::from_millis(500), Duration::from_secs(3))
+}
+
 fn io_settings(tcp: &TcpStream, buffer: Option<usize>) -> Result<()> {
     tcp.set_read_timeout(Some(Duration::from_millis(30)))?;
-    tcp.set_write_timeout(Some(Duration::from_millis(500)))?;
+    let srtt_us = tcp_stats::sample(tcp).map_or(0, |s| s.srtt_us);
+    tcp.set_write_timeout(Some(tcp_write_timeout(srtt_us)))?;
     tcp.set_nodelay(true)?;
     if let Some(bytes) = buffer {
         socket2::SockRef::from(tcp).set_send_buffer_size(bytes)?;
@@ -328,8 +341,10 @@ fn serve_session(
         tcp: listener.local_addr()?.port(),
         token,
     })?;
-    // An encrypted control acknowledgement means the client has already connected its data socket.
+    // The client opens its admitted sockets in order before acknowledging the join.
+    c.0.set_read_timeout(Some(join_timeout(plan.mode, plan.flow_limit)))?;
     ensure!(c.recv::<String>()? == "joined", "missing data setup");
+    c.0.set_read_timeout(Some(Duration::from_secs(5)))?;
     listener.set_nonblocking(true)?;
     let mut tcp = Vec::new();
     if plan.mode != Mode::Udp {
@@ -469,10 +484,8 @@ fn client(addr: SocketAddr, plan: Session, key: &str) -> Result<()> {
     let mut tcp = Vec::new();
     if plan.mode != Mode::Udp {
         for _ in 0..plan.flow_limit {
-            let mut flow = TcpStream::connect_timeout(
-                &SocketAddr::new(addr.ip(), tp),
-                Duration::from_secs(3),
-            )?;
+            let mut flow =
+                TcpStream::connect_timeout(&SocketAddr::new(addr.ip(), tp), DATA_CONNECT_TIMEOUT)?;
             flow.write_all(&token)?;
             io_settings(&flow, plan.tcp_send_buffer)?;
             tcp.push(engine::Flow::new(flow));
@@ -608,6 +621,25 @@ fn main() -> Result<()> {
             },
             &key(&args)?,
         ),
+    }
+}
+
+#[cfg(test)]
+mod high_latency_tests {
+    use super::*;
+
+    #[test]
+    fn setup_covers_serial_connections_without_extending_udp_setup() {
+        assert_eq!(join_timeout(Mode::Udp, 16), Duration::from_secs(5));
+        assert_eq!(join_timeout(Mode::Tcp, 8), Duration::from_secs(29));
+        assert_eq!(join_timeout(Mode::Combined, 16), Duration::from_secs(53));
+    }
+
+    #[test]
+    fn tcp_stall_budget_allows_ack_progress_and_remains_bounded() {
+        assert_eq!(tcp_write_timeout(0), Duration::from_millis(500));
+        assert_eq!(tcp_write_timeout(700_000), Duration::from_millis(2100));
+        assert_eq!(tcp_write_timeout(u64::MAX), Duration::from_secs(3));
     }
 }
 
