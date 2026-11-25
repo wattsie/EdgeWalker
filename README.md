@@ -12,6 +12,8 @@ Follow the test from Site A to Site B. The solid blue line shows the rate Site A
 
 The Rust engine handles network traffic. Python manages sessions, replays receiver feedback and writes reports. See the [design brief](docs/brief.md) for the requirements and [third-party notices](third-party/dependencies.json) for dependency licenses.
 
+For a live satellite trial using the interactive prerelease, take the [offline validation tests](docs/validation-tests.md) to both sites. The guide covers the gateway, client, optional calibration and cleanup.
+
 ## Install
 
 Use Python 3.11 or later on each endpoint. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
