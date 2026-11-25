@@ -1,12 +1,12 @@
 # ![EdgeWalker. Find your rate. Walk the edge.](docs/images/edgewalker-banner.png)
 
-How much traffic can your link carry when conditions change? EdgeWalker raises the sending rate in steps and checks what reaches the receiver. Each direction has its own controller and a ceiling you set.
+How much traffic can your link carry in each direction? EdgeWalker can test from Site A to Site B, from Site B to Site A, or in both directions at once. For each active direction, it adjusts the offered rate within the ceiling you set and measures how much traffic gets through.
 
 ## How EdgeWalker finds the edge
 
-![Illustrative trace of offered rate and receiver throughput during ramp-up, backoff and recovery probing.](docs/images/rate-and-recovery.png)
+![Illustrative trace from Site A to Site B. The offered and delivered rates climb together, diverge during impairment and converge again during recovery.](docs/images/rate-and-recovery.png)
 
-In this example, the solid blue line shows what the sender offers. The dashed yellow line shows what gets through. At first they climb together. When delivery falls behind, the sender backs off. It then tries small increases and checks the receiver again. As the link recovers, those probes let it find a higher sustainable rate.
+Follow the test from Site A to Site B. The solid blue line shows the rate Site A offers. The dashed yellow line shows the rate delivered to Site B. When delivery falls behind, EdgeWalker backs off. It periodically probes at a higher rate to see whether the link has recovered. In a two-way test, a separate controller makes the same assessment for traffic from Site B to Site A.
 
 [Install EdgeWalker](#install) · [Run your first calibration](#first-calibration) · [Run a measurement](#run-a-measurement)
 
