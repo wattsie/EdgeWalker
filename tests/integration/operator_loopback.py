@@ -139,6 +139,65 @@ class OperatorLoopback(unittest.TestCase):
         self.assertEqual(manifest["termination_reason"], "operator_stop")
         self.assertEqual(manifest["sessions"], 1)
 
+    def test_menu_preserves_confirmed_edits_across_reauthentication(self):
+        master, slave = pty.openpty()
+        self.addCleanup(os.close, master)
+        self.addCleanup(os.close, slave)
+        out = self.work / "edited-reconnect"
+        proc = subprocess.Popen([
+            CLI, "-m", "--connect", self.addr, "--mode", "tcp", "--manual-resume",
+            "--duration", "35", "--window-ms", "500", "--forward-max", "160000",
+            "--flows", "1", "--flow-limit", "2", "--output", out,
+        ], env=self.env, stdin=slave, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(proc.kill)
+
+        def wait_for(name, text):
+            until = time.monotonic() + 8
+            while text not in (out / name).read_text():
+                self.assertLess(time.monotonic(), until, text)
+                time.sleep(.04)
+
+        def command(text):
+            os.write(master, (text + "\n").encode())
+
+        command("y")
+        self.wait_rows(out.name)
+        for edit, marker in (
+            ("reserve forward 320000", "operator_reservation_confirmed,320000"),
+            ("limit forward 320000", "operator_limit,320000"),
+            ("flows forward 2", "operator_flows,2"),
+            ("set forward start_bps 280000", "operator_set_start_bps,280000"),
+        ):
+            command(edit)
+            wait_for("events.csv", marker)
+        self.stop_server()
+        wait_for("events.csv", "manual_resume_required")
+        self.launch_server(self.addr)
+        command("remaining 8")
+        wait_for("events.csv", "operator_remaining_seconds,8")
+        command("resume")
+        wait_for("events.csv", "session_ready,2")
+        _, err = proc.communicate(timeout=12)
+        self.assertEqual(proc.returncode, 0, err)
+        self.assertEqual(json.loads((out / "session.json").read_text())["status"], "completed_with_gaps")
+        with (out / "series-fl.csv").open() as handle:
+            resumed = [r for r in csv.DictReader(handle) if r["session"] == "2"]
+        self.assertTrue(resumed)
+        self.assertEqual((resumed[0]["tcp_flows"], resumed[0]["offer_bps"]), ("2", "280000"))
+        self.assertGreater(int(resumed[0]["delivered_bps"]), 0)
+
+    def test_combined_deadline_after_a_valid_extended_window(self):
+        # At 120 kbps the canary needs 667 ms for one negotiated datagram.
+        # The nominal 500 ms window extends, then the deadline truncates the tail.
+        proc = self.run_client("canary-tail", "--mode", "combined", "--forward-max",
+                               "120000", "--window-ms", "500", "--duration", "2.8",
+                               "--flow-limit", "1", "--timing-every", "0")
+        _, err = proc.communicate(timeout=8)
+        self.assertEqual(proc.returncode, 0, err)
+        manifest = json.loads((self.work / "canary-tail/session.json").read_text())
+        self.assertEqual(manifest["termination_reason"], "deadline")
+        self.assertGreater((self.work / "canary-tail/windows.jsonl").stat().st_size, 0)
+
     def test_invalid_native_budget_before_connection(self):
         p = self.run_client("invalid", "--mode", "tcp", "--forward-max", "2350000000",
                             "--duration", "2")

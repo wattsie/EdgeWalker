@@ -756,7 +756,10 @@ def run(args):
                             minimum_ms = max(
                                 minimum_ms, (8000 * size + rate - 1) // rate
                             )
-                    if minimum_ms > max(ms, args.window_ms):
+                    if ms < minimum_ms and (
+                        minimum_ms > 10000 or available_ms >= minimum_ms
+                        or end == float("inf")
+                    ):
                         raise ValueError(
                             "offer too small for active streams within window"
                         )
