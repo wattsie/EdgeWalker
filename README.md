@@ -1,6 +1,14 @@
-# EdgeWalker
+# ![EdgeWalker. Find your rate. Walk the edge.](docs/images/edgewalker-banner.png)
 
-EdgeWalker measures the traffic a link can sustain by adjusting the sending rate in response to receiver feedback.
+How much traffic can your link carry when conditions change? EdgeWalker raises the sending rate in steps and checks what reaches the receiver. Each direction has its own controller and a ceiling you set.
+
+## How EdgeWalker finds the edge
+
+![Illustrative trace of offered rate and receiver throughput during ramp-up, backoff and recovery probing.](docs/images/rate-and-recovery.png)
+
+In this example, the solid blue line shows what the sender offers. The dashed yellow line shows what gets through. At first they climb together. When delivery falls behind, the sender backs off. It then tries small increases and checks the receiver again. As the link recovers, those probes let it find a higher sustainable rate.
+
+[Install EdgeWalker](#install) · [Run your first calibration](#first-calibration) · [Run a measurement](#run-a-measurement)
 
 The Rust engine handles network traffic. Python manages sessions, replays receiver feedback and writes reports. See the [design brief](docs/brief.md) for the requirements and [third-party notices](third-party/dependencies.json) for dependency licenses.
 
