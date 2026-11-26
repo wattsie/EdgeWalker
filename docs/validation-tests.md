@@ -6,7 +6,7 @@ Start with a 30-second forward TCP test to verify the route, delivery and shutdo
 
 ## Before leaving for the site
 
-Take this file, the appropriate release archive for each host, its matching `.sha256` file, and a way to provision the shared key securely. Each host needs Python 3.11 or later. The available binaries support Linux x86-64, Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
+Take the appropriate release archive and a way to provision the shared key securely. The x86-64 archive contains this guide. Keep its matching checksum if you plan to verify it again onsite. Each host needs Python 3.11 or later. The available binaries support Linux x86-64, Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
 
 ### Intel and AMD Linux field installation
 
@@ -20,17 +20,25 @@ python3 --version
 
 Proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
 
-For the interactive field test, download these three files into a new directory on an internet-connected machine. Copy all three to the offline host, keeping the archive and checksum together:
+For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-docs.1
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-docs.2
 archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
-  curl -fLO "$release/validation-tests.md"
+  sha256sum -c "$archive.sha256"
 ```
 
-From that directory **on the field host**, verify before extracting:
+**Single-file handoff.** If you already verified the checksum on the connected machine and transferred only the archive using a trusted copy method, run this on the field host:
+
+```sh
+archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
+tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
+  ./bin/edgewalker-native --version && ./edgewalker --menu --help
+```
+
+**With the checksum onsite**, use this alternative from the download directory:
 
 ```sh
 archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
@@ -41,11 +49,11 @@ sha256sum -c "$archive.sha256" &&
   ./edgewalker --menu --help
 ```
 
-Expect the archive checksum to report `OK`, native version `0.2.1-dynamic.2`, and the menu help text. If any check fails, stop before starting traffic. Use the separately downloaded `validation-tests.md` for the current field procedure.
+Expect the archive checksum to report `OK`, native version `0.2.1-dynamic.2`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
 
 ### ARM installations
 
-For these platforms, download the matching archive and checksum and use the appropriate block below.
+For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-docs.1) and the appropriate block below.
 
 Linux ARM64:
 
