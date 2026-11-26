@@ -31,7 +31,7 @@ For a live satellite trial using the interactive prerelease, take the [offline v
 
 Use Python 3.11 or later on each endpoint. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
 
-**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon or `linux-aarch64` for 64-bit ARM Linux (Debian 12 build). From the download directory:
+**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
 
 ```sh
 archive="edgewalker-0.2.0-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).tar.gz"
@@ -51,7 +51,42 @@ python3 --version
 ./edgewalker calibrate --help
 ```
 
-**Build from source** on a Linux or macOS host with Git, make, a C linker, Python 3.11+ and a current stable Rust toolchain with Cargo. On macOS the Command Line Tools provide make and the linker. On Debian-family Linux the `build-essential` package provides them. From a shell authenticated to the private repository:
+### Intel and AMD Linux field installation
+
+Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
+
+```sh
+uname -m
+getconf GNU_LIBC_VERSION
+python3 --version
+```
+
+Proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
+
+For the interactive field test, download these three files into a new directory on an internet-connected machine. Copy all three to the offline host, keeping the archive and checksum together:
+
+```sh
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-docs.1
+archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
+curl -fLO "$release/$archive" &&
+  curl -fLO "$release/$archive.sha256" &&
+  curl -fLO "$release/validation-tests.md"
+```
+
+From that directory **on the field host**, verify before extracting:
+
+```sh
+archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
+sha256sum -c "$archive.sha256" &&
+  tar -xzf "$archive" &&
+  cd "${archive%.tar.gz}" &&
+  ./bin/edgewalker-native --version &&
+  ./edgewalker --menu --help
+```
+
+Expect the archive checksum to report `OK`, native version `0.2.1-dynamic.2`, and the menu help text. If any check fails, stop before starting traffic. Use the separately downloaded `validation-tests.md` for the current field procedure.
+
+**Build from source** on a Linux or macOS host with Git, make, a C linker, Python 3.11+ and a current stable Rust toolchain with Cargo. On macOS the Command Line Tools provide make and the linker. On Debian-family Linux the `build-essential` package provides them. From a shell with Git installed:
 
 ```sh
 git clone --branch v0.2.0 https://github.com/wattsie/EdgeWalker.git
