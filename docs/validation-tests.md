@@ -6,9 +6,46 @@ Start with a 30-second forward TCP test to verify the route, delivery and shutdo
 
 ## Before leaving for the site
 
-Take this file, the appropriate release archive for each host, its matching `.sha256` file, and a way to provision the shared key securely. Each host needs Python 3.11 or later. The available binaries support Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
+Take this file, the appropriate release archive for each host, its matching `.sha256` file, and a way to provision the shared key securely. Each host needs Python 3.11 or later. The available binaries support Linux x86-64, Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
 
-Verify and extract the matching package on each device. Run the block for that platform from the directory containing the download. Continue only if the checksum succeeds.
+### Intel and AMD Linux field installation
+
+Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
+
+```sh
+uname -m
+getconf GNU_LIBC_VERSION
+python3 --version
+```
+
+Proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
+
+For the interactive field test, download these three files into a new directory on an internet-connected machine. Copy all three to the offline host, keeping the archive and checksum together:
+
+```sh
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-docs.1
+archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
+curl -fLO "$release/$archive" &&
+  curl -fLO "$release/$archive.sha256" &&
+  curl -fLO "$release/validation-tests.md"
+```
+
+From that directory **on the field host**, verify before extracting:
+
+```sh
+archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
+sha256sum -c "$archive.sha256" &&
+  tar -xzf "$archive" &&
+  cd "${archive%.tar.gz}" &&
+  ./bin/edgewalker-native --version &&
+  ./edgewalker --menu --help
+```
+
+Expect the archive checksum to report `OK`, native version `0.2.1-dynamic.2`, and the menu help text. If any check fails, stop before starting traffic. Use the separately downloaded `validation-tests.md` for the current field procedure.
+
+### ARM installations
+
+For these platforms, download the matching archive and checksum and use the appropriate block below.
 
 Linux ARM64:
 
@@ -24,7 +61,7 @@ archive=edgewalker-0.2.1-dynamic.2-darwin-arm64.tar.gz
 shasum -a 256 -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
-On both hosts:
+On ARM hosts, check the installation:
 
 ```sh
 python3 --version
@@ -32,7 +69,11 @@ python3 --version
 ./edgewalker --menu --help
 ```
 
-Expect native version `0.2.1-dynamic.2`. For a new installation, generate one key on the gateway. This command refuses to overwrite an existing file.
+Expect native version `0.2.1-dynamic.2`.
+
+### Shared key on all platforms
+
+For a new installation, generate one key on the gateway. This command refuses to overwrite an existing file.
 
 ```sh
 (umask 077 && mkdir -p lab && set -C && ./edgewalker keygen > lab/config.json)
