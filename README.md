@@ -31,7 +31,7 @@ For a live satellite trial using the interactive prerelease, take the [offline v
 
 Install Python 3.11 or later on each host that uses the Python launcher. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
 
-**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
+**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. For the interactive client, the [four-platform prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-compat.2) includes all three Linux packages with systemd setup, plus Apple silicon. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
 
 ```sh
 archive="edgewalker-0.2.0-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).tar.gz"
@@ -53,7 +53,7 @@ python3 --version
 
 ### Intel and AMD Linux field installation
 
-**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-compat.1). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](docs/linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-compat.2). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](docs/linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -68,7 +68,7 @@ For the standard package and Python launcher below, proceed if the results are `
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-docs.2
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-compat.2
 archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
@@ -181,3 +181,5 @@ A `tick` advances time without feedback. Timeouts fire at their deadlines, befor
 The [plateau trace](examples/fixed-limit-plateau.json) keeps the configured ceiling at 9,600 bps and models a receiver that tops out at 6,400 bps. At 25 seconds the controller selects 6,400 bps, the lowest tested offer that delivered the maximum. It probes at 35 and 50 seconds. Both probes offer 7,200 bps, deliver 6,400 bps and return to the selected rate after a five-second measurement.
 
 To exercise plateau detection, supply measured `excess_delay_us` in each feedback interval. The replay compares total received bytes per elapsed time across qualified lossless windows. Its provisional rule requires two higher offers without improvement, equal excess delay across the observations, and counts a gain of one whole bps as meaningful. Once it finds the plateau, one qualified probe window can confirm a gain or return the offer to the best operating point. Traces without delay evidence retain the original loss-only decisions. Field thresholds for meaningful gain and flat delay still need calibration.
+
+Maintainers can find the required platform builds and verification command in the [release checklist](docs/releasing.md).

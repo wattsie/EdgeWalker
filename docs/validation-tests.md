@@ -10,7 +10,7 @@ Take the appropriate release archive and a way to provision the shared key secur
 
 ### Intel and AMD Linux field installation
 
-**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-compat.1). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-compat.2). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -25,7 +25,7 @@ For the standard package and Python launcher below, proceed if the results are `
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-docs.2
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-compat.2
 archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
@@ -55,7 +55,7 @@ Expect the archive checksum to report `OK`, native version `0.2.1-dynamic.2`, an
 
 ### ARM installations
 
-For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-docs.1) and the appropriate block below.
+For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-compat.2) and the appropriate block below.
 
 Linux ARM64:
 

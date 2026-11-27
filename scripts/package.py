@@ -94,7 +94,6 @@ def main():
         linux_files = [(ROOT / path, path) for path in (
             "deploy/systemd/edgewalker-server.service",
             "deploy/systemd/server.env.example",
-            "docs/linux-server-service.md",
         )]
     args.output.mkdir(parents=True, exist_ok=True)
     dest = args.output / (name + ".tar.gz")
@@ -111,6 +110,8 @@ def main():
                 (ROOT / "edgewalker", "edgewalker"),
                 (ROOT / "README.md", "README.md"),
                 (ROOT / "docs/brief.md", "docs/brief.md"),
+                (ROOT / "docs/linux-server-service.md", "docs/linux-server-service.md"),
+                (ROOT / "docs/releasing.md", "docs/releasing.md"),
                 (ROOT / "docs/operator.md", "docs/operator.md"),
                 (ROOT / "docs/validation-tests.md", "docs/validation-tests.md"),
                 *[

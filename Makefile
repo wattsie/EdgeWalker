@@ -14,3 +14,8 @@ check:
 
 package: build
 	python3 -B scripts/package.py --output dist
+
+.PHONY: check-release
+RELEASE_DIR ?= dist
+check-release:
+	python3 -B scripts/check_release.py "$(RELEASE_DIR)"
