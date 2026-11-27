@@ -6,9 +6,11 @@ Start with a 30-second forward TCP test to verify the route, delivery and shutdo
 
 ## Before leaving for the site
 
-Take the appropriate release archive and a way to provision the shared key securely. The x86-64 archive contains this guide. Keep its matching checksum if you plan to verify it again onsite. Each host needs Python 3.11 or later. The available binaries support Linux x86-64, Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
+Take the appropriate release archive and a way to provision the shared key securely. The x86-64 archive contains this guide. Keep its matching checksum if you plan to verify it again onsite. Hosts using the Python launcher need Python 3.11 or later. The available binaries support Linux x86-64, Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
 
 ### Intel and AMD Linux field installation
+
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-compat.1). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -18,7 +20,7 @@ getconf GNU_LIBC_VERSION
 python3 --version
 ```
 
-Proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
+For the standard package and Python launcher below, proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
 
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
@@ -92,6 +94,8 @@ Securely provision that same file at `lab/config.json` inside the satellite clie
 ## Test 1  Verify the satellite path at low load
 
 The terrestrial gateway runs the server. The satellite site runs the client and initiates the connection. **Forward** is download to the satellite site. **Return** is upload to the gateway.
+
+If the gateway service is already active with the specified address, ports and capacity, proceed to the client command.
 
 **Gateway terminal.** Replace the example IP with an address assigned to the gateway's test interface. Permit the satellite site's traffic to TCP control port 5207 and the selected TCP/UDP data ports 5210 through 5220. If the gateway is behind NAT, arrange forwarding for those ports and give the client the reachable address. Keep this terminal open.
 

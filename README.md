@@ -29,7 +29,7 @@ For a live satellite trial using the interactive prerelease, take the [offline v
 
 ## Install
 
-Use Python 3.11 or later on each endpoint. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
+Install Python 3.11 or later on each host that uses the Python launcher. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
 
 **Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
 
@@ -53,6 +53,8 @@ python3 --version
 
 ### Intel and AMD Linux field installation
 
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.1-dynamic.2-compat.1). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](docs/linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
+
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
 ```sh
@@ -61,7 +63,7 @@ getconf GNU_LIBC_VERSION
 python3 --version
 ```
 
-Proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
+For the standard package and Python launcher below, proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
 
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 

@@ -1,0 +1,21 @@
+[Unit]
+Description=EdgeWalker measurement server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=edgewalker
+Group=edgewalker
+EnvironmentFile=/etc/edgewalker/server.env
+ExecStart=/opt/edgewalker-server/bin/edgewalker-native server --config /etc/edgewalker/config.json --listen ${EDGEWALKER_LISTEN} --capacity ${EDGEWALKER_CAPACITY} --data-ports ${EDGEWALKER_DATA_PORTS}
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

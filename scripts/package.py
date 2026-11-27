@@ -76,12 +76,26 @@ def main():
         type=Path,
         help="locked build metadata from the build container",
     )
+    parser.add_argument("--glibc-2-17", action="store_true",
+                        help="label a Linux x86-64 archive built and tested on glibc 2.17")
     args = parser.parse_args()
+    if args.glibc_2_17 and (platform.system() != "Linux" or platform.machine() != "x86_64"
+                            or os.confstr("CS_GNU_LIBC_VERSION") != "glibc 2.17"):
+        parser.error("--glibc-2-17 requires the x86-64 glibc 2.17 packaging environment")
     binary = args.engine.resolve()
     version = subprocess.check_output([binary, "--version"], text=True).split()[-1]
     name = (
         f"edgewalker-{version}-{platform.system().lower()}-{platform.machine().lower()}"
     )
+    if args.glibc_2_17:
+        name += "-glibc2.17"
+    linux_files = []
+    if platform.system() == "Linux":
+        linux_files = [(ROOT / path, path) for path in (
+            "deploy/systemd/edgewalker-server.service",
+            "deploy/systemd/server.env.example",
+            "docs/linux-server-service.md",
+        )]
     args.output.mkdir(parents=True, exist_ok=True)
     dest = args.output / (name + ".tar.gz")
     checksum = dest.with_suffix(dest.suffix + ".sha256")
@@ -92,6 +106,7 @@ def main():
         with tarfile.open(archive, "w:gz") as t:
             for src, target in [
                 (binary, "bin/edgewalker-native"),
+                *linux_files,
                 *dependency_notices(Path(tmp), args.cargo_metadata),
                 (ROOT / "edgewalker", "edgewalker"),
                 (ROOT / "README.md", "README.md"),
