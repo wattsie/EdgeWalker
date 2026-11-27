@@ -9,8 +9,8 @@ Run these commands on the server. Expect `x86_64` and `glibc 2.17` or newer. Fro
 ```sh
 uname -m
 getconf GNU_LIBC_VERSION
-archive=edgewalker-0.2.1-dynamic.2-linux-x86_64-glibc2.17.tar.gz
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-compat.2
+archive=edgewalker-0.2.2-rc.1-linux-x86_64-glibc2.17.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.1
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256" &&
@@ -18,7 +18,7 @@ curl -fLO "$release/$archive" &&
   ./bin/edgewalker-native --version
 ```
 
-The embedded engine version is 0.2.1-dynamic.2. Keep this directory available for the service files and field guide.
+The embedded engine version is 0.2.2-rc.1. Keep this directory available for the service files and field guide.
 
 ## Install the gateway
 
