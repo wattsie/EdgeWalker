@@ -12,13 +12,13 @@ Follow the test from Site A to Site B. The solid blue line shows the rate Site A
 
 The Rust engine handles network traffic. Python manages sessions, replays receiver feedback and writes reports. See the [design brief](docs/brief.md) for the requirements and [third-party notices](third-party/dependencies.json) for dependency licenses.
 
-For a live satellite trial using the interactive prerelease, take the [offline validation tests](docs/validation-tests.md) to both sites. The guide covers the gateway, client, optional calibration and cleanup.
+For the interactive menu and concurrent client support, download [EdgeWalker 0.2.2 RC2](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.2). Each archive includes the [RC2 offline validation guide](https://github.com/wattsie/EdgeWalker/blob/v0.2.2-rc.2/docs/validation-tests.md) for use at both sites. The guide covers the gateway, client, optional calibration and cleanup.
 
 ## Install
 
-Use Python 3.11 or later on each endpoint. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
+Install Python 3.11 or later on hosts using the Python launcher. The native RC2 gateway can run without Python. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
 
-**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
+**Install a release archive** from [stable 0.2.0](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.0) or [candidate 0.2.2 RC2](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.2). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
 
 ```sh
 archive="edgewalker-0.2.0-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).tar.gz"
@@ -48,22 +48,23 @@ getconf GNU_LIBC_VERSION
 python3 --version
 ```
 
-Proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
+For the standard x86-64 package and Python launcher, proceed if the results are `x86_64`, glibc **2.34 or later**, and Python **3.11 or later**. The native engine also uses the system `libgcc_s.so.1`. Kernel version and CPU governor alone cannot confirm these requirements.
 
-For the interactive field test, download these three files into a new directory on an internet-connected machine. Copy all three to the offline host, keeping the archive and checksum together:
+For glibc 2.17 through 2.33, use the x86-64 compatibility archive and follow the [RC2 Linux server setup](https://github.com/wattsie/EdgeWalker/blob/v0.2.2-rc.2/docs/linux-server-service.md).
+
+For the standard x86-64 field installation, download these two files and keep them together when transferring to an offline host:
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.1-dynamic.2-docs.1
-archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.2
+archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
-  curl -fLO "$release/$archive.sha256" &&
-  curl -fLO "$release/validation-tests.md"
+  curl -fLO "$release/$archive.sha256"
 ```
 
 From that directory **on the field host**, verify before extracting:
 
 ```sh
-archive=edgewalker-0.2.1-dynamic.2-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
 sha256sum -c "$archive.sha256" &&
   tar -xzf "$archive" &&
   cd "${archive%.tar.gz}" &&
@@ -71,7 +72,7 @@ sha256sum -c "$archive.sha256" &&
   ./edgewalker --menu --help
 ```
 
-Expect the archive checksum to report `OK`, native version `0.2.1-dynamic.2`, and the menu help text. If any check fails, stop before starting traffic. Use the separately downloaded `validation-tests.md` for the current field procedure.
+Expect the archive checksum to report `OK`, native version `0.2.2-rc.2`, and the menu help text. If any check fails, stop before starting traffic. Use the bundled `docs/validation-tests.md` for the current field procedure.
 
 **Build from source** on a Linux or macOS host with Git, make, a C linker, Python 3.11+ and a current stable Rust toolchain with Cargo. On macOS the Command Line Tools provide make and the linker. On Debian-family Linux the `build-essential` package provides them. From a shell with Git installed:
 
