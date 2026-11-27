@@ -1,6 +1,6 @@
 # Validation Tests
 
-EdgeWalker satellite field guide for the interactive prerelease `0.2.2-rc.1`.
+EdgeWalker satellite field guide for the interactive prerelease `0.2.2-rc.2`.
 
 Start with a 30-second forward TCP test to verify the route, delivery and shutdown. Then compare one TCP connection with two under the same total offer. UDP calibration is a separate, optional test. All commands run locally from the extracted package directory. Each client run needs a new output directory.
 
@@ -10,7 +10,7 @@ Take the appropriate release archive and a way to provision the shared key secur
 
 ### Intel and AMD Linux field installation
 
-**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.1). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.2). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -25,8 +25,8 @@ For the standard package and Python launcher below, proceed if the results are `
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.1
-archive=edgewalker-0.2.2-rc.1-linux-x86_64.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.2
+archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256"
@@ -35,7 +35,7 @@ curl -fLO "$release/$archive" &&
 **Single-file handoff.** If you already verified the checksum on the connected machine and transferred only the archive using a trusted copy method, run this on the field host:
 
 ```sh
-archive=edgewalker-0.2.2-rc.1-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
 tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
   ./bin/edgewalker-native --version && ./edgewalker --menu --help
 ```
@@ -43,7 +43,7 @@ tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
 **With the checksum onsite**, use this alternative from the download directory:
 
 ```sh
-archive=edgewalker-0.2.2-rc.1-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
 sha256sum -c "$archive.sha256" &&
   tar -xzf "$archive" &&
   cd "${archive%.tar.gz}" &&
@@ -51,23 +51,23 @@ sha256sum -c "$archive.sha256" &&
   ./edgewalker --menu --help
 ```
 
-Expect the archive checksum to report `OK`, native version `0.2.2-rc.1`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
+Expect the archive checksum to report `OK`, native version `0.2.2-rc.2`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
 
 ### ARM installations
 
-For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.1) and the appropriate block below.
+For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.2) and the appropriate block below.
 
 Linux ARM64:
 
 ```sh
-archive=edgewalker-0.2.2-rc.1-linux-aarch64.tar.gz
+archive=edgewalker-0.2.2-rc.2-linux-aarch64.tar.gz
 sha256sum -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
 Apple silicon:
 
 ```sh
-archive=edgewalker-0.2.2-rc.1-darwin-arm64.tar.gz
+archive=edgewalker-0.2.2-rc.2-darwin-arm64.tar.gz
 shasum -a 256 -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
@@ -79,7 +79,7 @@ python3 --version
 ./edgewalker --menu --help
 ```
 
-Expect native version `0.2.2-rc.1`.
+Expect native version `0.2.2-rc.2`.
 
 ### Shared key on all platforms
 
@@ -117,6 +117,10 @@ GATEWAY=192.0.2.10
 ```
 
 **Proceed when** the client exits successfully, the report shows forward receiver windows and positive received bytes, and `sat-smoke-01/session.json` records deadline termination with `stop_acknowledged` true. Check the report's coverage flag and gaps. A run with no receiver windows has no measured throughput. If setup fails, check the addresses, matching keys, ports, and gateway capacity before increasing the load.
+
+### Optional four-client check
+
+On an approved path, run the first command from four clients at the same time against one gateway control address. Give each process its own output directory. To keep total test load within 1 Mbps, set each client's forward start and maximum to `250000` and keep the server capacity at `1000000`. Allow four free numbers in the server data range. Verify overlapping receiver windows and positive delivery in all four reports. Stop one client and start a replacement while the others continue. If an intervening firewall filters the data range, consult [simultaneous clients and data ports](operator.md#simultaneous-clients-and-data-ports).
 
 ## Test 2  Compare one TCP flow with two
 

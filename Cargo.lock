@@ -275,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "edgewalker"
-version = "0.2.2-rc.1"
+version = "0.2.2-rc.2"
 dependencies = [
  "anyhow",
  "clap",

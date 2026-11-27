@@ -14,7 +14,7 @@ use engine::{Endpoint, Mode, Rates, Window};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env, fs,
     io::{self, BufRead, Read, Write},
     net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket},
@@ -124,6 +124,10 @@ struct Session {
 }
 #[derive(Serialize, Deserialize)]
 enum Admission {
+    DataPortsUnavailable {
+        first: u16,
+        last: u16,
+    },
     OverloadDenied {
         allowed_ms: u64,
     },
@@ -143,14 +147,18 @@ enum Admission {
 #[derive(Default)]
 struct Ledger {
     used: Rates,
+    data_ports: HashSet<u16>,
     workers: HashMap<IpAddr, usize>,
     failed: HashMap<IpAddr, Instant>,
 }
 type Shared = Arc<Mutex<Ledger>>;
-struct Slot(Shared, IpAddr, Rates);
+struct Slot(Shared, IpAddr, Rates, Option<u16>);
 impl Drop for Slot {
     fn drop(&mut self) {
         let mut l = self.0.lock().unwrap();
+        if let Some(port) = self.3 {
+            l.data_ports.remove(&port);
+        }
         l.used.forward -= self.2.forward;
         l.used.reverse -= self.2.reverse;
         let n = l.workers.get_mut(&self.1).unwrap();
@@ -264,20 +272,67 @@ fn parse_ports(text: &str) -> Result<(u16, u16)> {
     ensure!(low > 0 && low <= high, "invalid data port range");
     Ok((low, high))
 }
-fn bind_data<T>(
-    ip: IpAddr,
-    range: Option<(u16, u16)>,
-    bind: impl Fn(SocketAddr) -> io::Result<T>,
-) -> Result<T> {
-    let (low, high) = range.unwrap_or((0, 0));
-    for port in low..=high {
-        match bind(SocketAddr::new(ip, port)) {
-            Ok(socket) => return Ok(socket),
-            Err(e) if e.kind() == io::ErrorKind::AddrInUse => continue,
-            Err(e) => return Err(e.into()),
-        }
+struct DataPorts {
+    port: u16,
+    udp: Option<UdpSocket>,
+    tcp: Option<TcpListener>,
+}
+
+impl DataPorts {
+    fn bind(ip: IpAddr, port: u16, mode: Mode) -> io::Result<Self> {
+        let tcp = if mode != Mode::Udp {
+            Some(TcpListener::bind((ip, port))?)
+        } else {
+            None
+        };
+        let port = tcp
+            .as_ref()
+            .map(TcpListener::local_addr)
+            .transpose()?
+            .map_or(port, |a| a.port());
+        let udp = if mode != Mode::Tcp {
+            Some(UdpSocket::bind((ip, port))?)
+        } else {
+            None
+        };
+        let port = udp
+            .as_ref()
+            .map(UdpSocket::local_addr)
+            .transpose()?
+            .map_or(port, |a| a.port());
+        Ok(Self { port, udp, tcp })
     }
-    bail!("data ports exhausted")
+}
+
+impl Slot {
+    fn allocate_ports(
+        &mut self,
+        control: SocketAddr,
+        range: Option<(u16, u16)>,
+        mode: Mode,
+    ) -> io::Result<Option<DataPorts>> {
+        // For an unrestricted range, let the kernel choose a port. Retry if
+        // another session owns that number on the other transport.
+        let (first, last) = range.unwrap_or((0, 63));
+        for candidate in first..=last {
+            let port = if range.is_some() { candidate } else { 0 };
+            if port == control.port() {
+                continue;
+            }
+            let sockets = match DataPorts::bind(control.ip(), port, mode) {
+                Ok(sockets) => sockets,
+                Err(e) if e.kind() == io::ErrorKind::AddrInUse => continue,
+                Err(e) => return Err(e),
+            };
+            if sockets.port != control.port()
+                && self.0.lock().unwrap().data_ports.insert(sockets.port)
+            {
+                self.3 = Some(sockets.port);
+                return Ok(Some(sockets));
+            }
+        }
+        Ok(None)
+    }
 }
 #[derive(Serialize, Deserialize)]
 enum Request {
@@ -312,7 +367,7 @@ fn serve_session(
     allow_overload_ms: u64,
     mut slot: Slot,
 ) -> Result<()> {
-    let local = s.local_addr()?.ip();
+    let local = s.local_addr()?;
     let peer = s.peer_addr()?.ip();
     let mut c = match Control::authenticate(s, key, false) {
         Ok(c) => c,
@@ -338,12 +393,20 @@ fn serve_session(
         c.send(&rejection)?;
         return Ok(());
     }
-    let udp = bind_data(local, ports, UdpSocket::bind)?;
-    let listener = bind_data(local, ports, TcpListener::bind)?;
+    let Some(DataPorts {
+        port,
+        udp,
+        tcp: listener,
+    }) = slot.allocate_ports(local, ports, plan.mode)?
+    else {
+        let (first, last) = ports.unwrap_or((0, 0));
+        c.send(&Admission::DataPortsUnavailable { first, last })?;
+        return Ok(());
+    };
     let token = random()?;
     c.send(&Admission::Ready {
-        udp: udp.local_addr()?.port(),
-        tcp: listener.local_addr()?.port(),
+        udp: if udp.is_some() { port } else { 0 },
+        tcp: if listener.is_some() { port } else { 0 },
         token,
         resize: true,
     })?;
@@ -351,9 +414,9 @@ fn serve_session(
     c.0.set_read_timeout(Some(join_timeout(plan.mode, plan.flow_limit)))?;
     ensure!(c.recv::<String>()? == "joined", "missing data setup");
     c.0.set_read_timeout(Some(Duration::from_secs(5)))?;
-    listener.set_nonblocking(true)?;
     let mut tcp = Vec::new();
-    if plan.mode != Mode::Udp {
+    if let Some(listener) = &listener {
+        listener.set_nonblocking(true)?;
         for _ in 0..plan.flow_limit {
             let (mut flow, addr) = listener.accept()?;
             ensure!(addr.ip() == peer, "unexpected data peer");
@@ -365,8 +428,7 @@ fn serve_session(
             tcp.push(engine::Flow::new(flow));
         }
     }
-    drop(listener);
-    if plan.mode != Mode::Tcp {
+    if let Some(udp) = &udp {
         udp.set_read_timeout(Some(Duration::from_secs(3)))?;
         let mut buf = [0; 33];
         let (n, addr) = udp.recv_from(&mut buf)?;
@@ -427,7 +489,7 @@ fn serve_session(
         c.send(&base)?;
         let result = engine::measure(
             &c.0,
-            Some(&udp),
+            udp.as_ref(),
             &mut tcp,
             &mut previous_udp,
             engine::Run {
@@ -445,6 +507,9 @@ fn serve_session(
         base += result.udp.sent;
         c.send(&result)?;
     }
+    drop(tcp);
+    drop(udp);
+    drop(listener);
     drop(slot);
     c.send(&"stopped")?;
     Ok(())
@@ -477,7 +542,7 @@ fn server(
         }
         *l.workers.entry(peer).or_default() += 1;
         drop(l);
-        let slot = Slot(ledger.clone(), peer, Rates::default());
+        let slot = Slot(ledger.clone(), peer, Rates::default(), None);
         let key = key.clone();
         thread::spawn(move || {
             let _ = serve_session(s, &key, cap, ports, allow_overload_ms, slot);
@@ -550,7 +615,10 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
     }
     ensure!(c.recv::<String>()? == "ready", "receiver unavailable");
     c.0.set_read_timeout(Some(Duration::from_secs(15)))?;
-    println!("{}", json!({"status":"ready","version":1,"resize":resize}));
+    println!(
+        "{}",
+        json!({"status":"ready","version":1,"resize":resize,"tcp_port":tp,"udp_port":up})
+    );
     let mut expected_peer_base = 0;
     let mut prev = 0;
     let origin = Instant::now();
@@ -705,8 +773,8 @@ mod tests {
         let ip = IpAddr::from([127, 0, 0, 1]);
         let shared = Shared::default();
         shared.lock().unwrap().workers.insert(ip, 2);
-        let mut first = Slot(shared.clone(), ip, Rates::default());
-        let mut second = Slot(shared.clone(), ip, Rates::default());
+        let mut first = Slot(shared.clone(), ip, Rates::default(), None);
+        let mut second = Slot(shared.clone(), ip, Rates::default(), None);
         let rates = |forward, reverse| Rates { forward, reverse };
         let cap = rates(100, 90);
         assert!(first.reserve(cap, rates(60, 30)).is_ok());

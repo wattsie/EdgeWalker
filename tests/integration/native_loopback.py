@@ -3,6 +3,9 @@
 import json
 from pathlib import Path
 import secrets
+import socket
+
+from shared_server import exercise
 import subprocess
 import tempfile
 import unittest
@@ -106,6 +109,29 @@ class NativeLoopback(unittest.TestCase):
         out, err = p.communicate("null\n", timeout=3)
         self.assertEqual(p.returncode, 0, err)
         self.assertIn("ready", out)
+
+    def test_four_clients_share_control_only(self):
+        server = self.start("server", "--listen", "127.0.0.1:0", "--capacity", "1600000")
+        address = json.loads(server.stdout.readline())["listening"]
+        exercise(BIN, self.cfg, address)
+
+    def test_single_port_exhaustion_across_transports(self):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        server = self.start("server", "--listen", "127.0.0.1:0", "--capacity", "800000",
+                            "--data-ports", f"{port}-{port}")
+        self.addr = json.loads(server.stdout.readline())["listening"]
+        held = self.client(400000, 0, "tcp")
+        self.assertEqual(json.loads(held.stdout.readline())["tcp_port"], port)
+        other = self.client(400000, 0, "udp")
+        _, error = other.communicate(timeout=5)
+        self.assertIn("DataPortsUnavailable", error)
+        held.communicate("null\n", timeout=5)
+        retry = self.client(800000, 0, "udp")
+        self.assertEqual(json.loads(retry.stdout.readline())["udp_port"], port)
+        retry.communicate("null\n", timeout=5)
+        self.assertEqual(retry.returncode, 0)
 
     def test_timing_reservation_and_paced_replies(self):
         p = self.start(

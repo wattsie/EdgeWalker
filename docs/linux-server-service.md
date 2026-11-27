@@ -9,8 +9,8 @@ Run these commands on the server. Expect `x86_64` and `glibc 2.17` or newer. Fro
 ```sh
 uname -m
 getconf GNU_LIBC_VERSION
-archive=edgewalker-0.2.2-rc.1-linux-x86_64-glibc2.17.tar.gz
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.1
+archive=edgewalker-0.2.2-rc.2-linux-x86_64-glibc2.17.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.2
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256" &&
@@ -18,7 +18,7 @@ curl -fLO "$release/$archive" &&
   ./bin/edgewalker-native --version
 ```
 
-The embedded engine version is 0.2.2-rc.1. Keep this directory available for the service files and field guide.
+The embedded engine version is 0.2.2-rc.2. Keep this directory available for the service files and field guide.
 
 ## Install the gateway
 
@@ -63,6 +63,12 @@ sudo journalctl -u edgewalker-server.service -n 20 --no-pager
 ```
 
 Expect `enabled`, `active` and a journal entry showing the chosen listening address. Enabling the unit starts it on later boots. The restart policy retries after a process failure. Use the 1 Mbps client smoke test in `docs/validation-tests.md` to verify delivery. On the next planned reboot, check `is-active` and the journal again. To apply changes to the environment or key, restart the service between sessions.
+
+## Four clients on one service
+
+Use the same server address and TCP control port (5207 in the example) for each client. The service passes the inclusive data range from `server.env` to the native server. Four 1 Mbps forward tests require at least 4 Mbps of approved transmit capacity and four free data-port numbers. Adjust the capacity only within the link owner's approved budget. The supplied range 5210–5220 has room for four sessions. After a configuration change, restart the service between tests and check the control listener with `sudo ss -ltnp 'sport = :5207'`.
+
+On filtered paths, permit the authorized clients to reach TCP 5207 and the configured data range using TCP, UDP or both according to the mode. Preserve the data port numbers when forwarding through NAT. See the [operator guide](operator.md#simultaneous-clients-and-data-ports) for join and release behavior.
 
 ## Stop or uninstall
 
