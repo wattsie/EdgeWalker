@@ -14,7 +14,13 @@ fn read_by(s: &mut TcpStream, mut dest: &mut [u8], deadline: Instant) -> Result<
         ensure!(!remaining.is_zero(), "control read deadline");
         s.set_read_timeout(Some(remaining))?;
         match s.read(dest) {
-            Ok(0) => anyhow::bail!("peer closed control"),
+            Ok(0) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "peer closed control",
+                )
+                .into())
+            }
             Ok(n) => dest = &mut dest[n..],
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e.into()),

@@ -219,6 +219,24 @@ fn join_timeout(mode: Mode, flows: u64) -> Duration {
     Duration::from_secs(5) + DATA_CONNECT_TIMEOUT * connections as u32
 }
 
+fn accept_by(listener: &TcpListener, deadline: Instant) -> io::Result<(TcpStream, SocketAddr)> {
+    loop {
+        if Instant::now() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "TCP data accept deadline",
+            ));
+        }
+        match listener.accept() {
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(10))
+            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            result => return result,
+        }
+    }
+}
+
 fn tcp_write_timeout(srtt_us: u64) -> Duration {
     Duration::from_micros(srtt_us.saturating_mul(3))
         .clamp(Duration::from_millis(500), Duration::from_secs(3))
@@ -424,7 +442,7 @@ fn serve_session(
     ports: Option<(u16, u16)>,
     allow_overload_ms: u64,
     mut slot: Slot,
-) -> Result<()> {
+) -> Result<&'static str> {
     let local = s.local_addr()?;
     let peer = s.peer_addr()?.ip();
     let mut c = match Control::authenticate(s, key, false) {
@@ -444,14 +462,14 @@ fn serve_session(
         c.send(&Admission::OverloadDenied {
             allowed_ms: allow_overload_ms,
         })?;
-        return Ok(());
+        return Ok("overload_rejected");
     }
     let mut remaining_overload = plan.overload_ms;
     let mut reservation = reserved_rates(&plan, plan.max);
     if let Err(rejection) = slot.reserve(cap, reservation) {
         eprintln!("session rejected peer={peer} reason=capacity");
         c.send(&rejection)?;
-        return Ok(());
+        return Ok("capacity_rejected");
     }
     let Some(DataPorts {
         port,
@@ -462,11 +480,11 @@ fn serve_session(
         let (first, last) = ports.unwrap_or((0, 0));
         eprintln!("session rejected peer={peer} reason=data_ports");
         c.send(&Admission::DataPortsUnavailable { first, last })?;
-        return Ok(());
+        return Ok("ports_exhausted");
     };
     eprintln!(
-        "session admitted peer={peer} mode={:?} data_port={port}",
-        plan.mode
+        "session admitted peer={peer} mode={:?} tcp_port={:?} udp_port={:?} forward_max_bps={} return_max_bps={} prepared_flows={}",
+        plan.mode,listener.as_ref().map(|_|port),udp.as_ref().map(|_|port),plan.max.forward,plan.max.reverse,plan.flow_limit
     );
     let token = random()?;
     c.send(&Admission::Ready {
@@ -483,12 +501,17 @@ fn serve_session(
     let mut tcp = Vec::new();
     if let Some(listener) = &listener {
         listener.set_nonblocking(true)?;
+        let deadline = Instant::now() + Duration::from_secs(5);
         for _ in 0..plan.flow_limit {
-            let (mut flow, addr) = listener.accept()?;
+            let (mut flow, addr) = accept_by(listener, deadline).context("tcp_accept")?;
             ensure!(addr.ip() == peer, "unexpected data peer");
-            flow.set_read_timeout(Some(Duration::from_secs(3)))?;
+            flow.set_read_timeout(Some(
+                deadline
+                    .checked_duration_since(Instant::now())
+                    .context("tcp_join_timeout")?,
+            ))?;
             let mut proof = [0; 32];
-            flow.read_exact(&mut proof)?;
+            flow.read_exact(&mut proof).context("tcp_token_read")?;
             ensure!(proof == token, "invalid data token");
             io_settings(&flow, plan.tcp_send_buffer)?;
             tcp.push(engine::Flow::new(flow));
@@ -497,7 +520,7 @@ fn serve_session(
     if let Some(udp) = &udp {
         udp.set_read_timeout(Some(Duration::from_secs(3)))?;
         let mut buf = [0; 33];
-        let (n, addr) = udp.recv_from(&mut buf)?;
+        let (n, addr) = udp.recv_from(&mut buf).context("udp_join_receive")?;
         ensure!(
             n == 32 && buf[..32] == token && addr.ip() == peer,
             "invalid UDP join"
@@ -596,7 +619,7 @@ fn serve_session(
     drop(listener);
     drop(slot);
     c.send(&"stopped")?;
-    Ok(())
+    Ok("stopped")
 }
 fn server(
     listen: SocketAddr,
@@ -629,8 +652,28 @@ fn server(
         let slot = Slot(ledger.clone(), peer, Rates::default(), None);
         let key = key.clone();
         thread::spawn(move || {
+            let started = Instant::now();
             let outcome = serve_session(s, &key, cap, ports, allow_overload_ms, slot);
-            eprintln!("connection ended peer={peer} orderly={}", outcome.is_ok());
+            let reason = match &outcome {
+                Ok(reason) => *reason,
+                Err(e) => match e.to_string().as_str() {
+                    "tcp_accept" => "tcp_accept",
+                    "tcp_token_read" => "tcp_token_read",
+                    "unexpected data peer" => "tcp_peer_mismatch",
+                    "invalid data token" => "tcp_token_mismatch",
+                    "udp_join_receive" => "udp_join_receive",
+                    "invalid UDP join" => "udp_peer_or_token_mismatch",
+                    "UDP reachability failed" => "udp_challenge_mismatch",
+                    "peer closed control" => "control_closed",
+                    "authentication failed" => "authentication_failed",
+                    _ => "connection_error",
+                },
+            };
+            eprintln!(
+                "connection ended peer={peer} orderly={} duration_ms={} reason={reason}",
+                outcome.is_ok(),
+                started.elapsed().as_millis()
+            );
         });
     }
     Ok(())
@@ -666,40 +709,53 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
         } => (udp, tcp, token, resize, reconcile),
         r => bail!("admission rejected: {}", serde_json::to_string(&r)?),
     };
-    let mut tcp = Vec::new();
-    if plan.mode != Mode::Udp {
-        for _ in 0..plan.flow_limit {
-            let mut flow =
-                TcpStream::connect_timeout(&SocketAddr::new(addr.ip(), tp), DATA_CONNECT_TIMEOUT)?;
-            flow.write_all(&token)?;
-            io_settings(&flow, plan.tcp_send_buffer)?;
-            tcp.push(engine::Flow::new(flow));
-        }
-    }
-    let udp = UdpSocket::bind((local, 0))?;
-    if plan.mode != Mode::Tcp {
-        udp.connect((addr.ip(), up))?;
-        udp.set_read_timeout(Some(Duration::from_secs(4)))?;
-        udp.send(&token)?;
-    }
-    c.send(&"joined")?;
-    if plan.mode != Mode::Tcp {
-        let mut challenge = [0; 33];
-        let length = udp.recv(&mut challenge).inspect_err(|e| {
-            // Admission already succeeded. A lost UDP join or challenge can
-            // time out before either endpoint has measured any payload.
-            if matches!(
-                e.kind(),
-                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
-            ) {
-                println!("{}", json!({"status":"data_setup_timeout"}));
+    let (mut tcp, udp) = (|| -> Result<_> {
+        let mut tcp = Vec::new();
+        if plan.mode != Mode::Udp {
+            for _ in 0..plan.flow_limit {
+                let mut flow = TcpStream::connect_timeout(
+                    &SocketAddr::new(addr.ip(), tp),
+                    DATA_CONNECT_TIMEOUT,
+                )?;
+                flow.write_all(&token)?;
+                io_settings(&flow, plan.tcp_send_buffer)?;
+                tcp.push(engine::Flow::new(flow));
             }
-        })?;
-        ensure!(length == 32, "invalid challenge");
-        c.send(&challenge[..32])?;
-        udp.set_read_timeout(Some(Duration::from_millis(30)))?;
-    }
-    ensure!(c.recv::<String>()? == "ready", "receiver unavailable");
+        }
+        let udp = UdpSocket::bind((local, 0))?;
+        if plan.mode != Mode::Tcp {
+            udp.connect((addr.ip(), up))?;
+            udp.set_read_timeout(Some(Duration::from_secs(4)))?;
+            udp.send(&token)?;
+        }
+        c.send(&"joined")?;
+        if plan.mode != Mode::Tcp {
+            let mut challenge = [0; 33];
+            let length = udp.recv(&mut challenge)?;
+            ensure!(length == 32, "invalid challenge");
+            c.send(&challenge[..32])?;
+            udp.set_read_timeout(Some(Duration::from_millis(30)))?;
+        }
+        ensure!(c.recv::<String>()? == "ready", "receiver unavailable");
+        Ok((tcp, udp))
+    })()
+    .inspect_err(|error| {
+        use io::ErrorKind::*;
+        if error.downcast_ref::<io::Error>().is_some_and(|e| {
+            matches!(
+                e.kind(),
+                WouldBlock
+                    | TimedOut
+                    | UnexpectedEof
+                    | ConnectionReset
+                    | BrokenPipe
+                    | ConnectionAborted
+                    | ConnectionRefused
+            )
+        }) {
+            println!("{}", json!({"status":"data_setup_timeout"}));
+        }
+    })?;
     c.0.set_read_timeout(Some(Duration::from_secs(15)))?;
     println!(
         "{}",
@@ -896,6 +952,88 @@ mod high_latency_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn data_handshake_can_finish_after_control_join() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let worker = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(320));
+            TcpStream::connect(addr).unwrap()
+        });
+        let (_, peer) = accept_by(&listener, Instant::now() + Duration::from_secs(3)).unwrap();
+        assert_eq!(peer, worker.join().unwrap().local_addr().unwrap());
+        assert_eq!(
+            accept_by(&listener, Instant::now()).unwrap_err().kind(),
+            io::ErrorKind::TimedOut
+        );
+    }
+
+    #[test]
+    fn readiness_waits_for_last_authenticated_flow_in_tcp_and_combined() -> Result<()> {
+        for mode in [Mode::Tcp, Mode::Combined] {
+            let control = TcpListener::bind("127.0.0.1:0")?;
+            let addr = control.local_addr()?;
+            let key = "test-only-fixture";
+            let rates = Rates {
+                forward: 1000000,
+                reverse: 1000000,
+            };
+            let server = thread::spawn(move || -> Result<_> {
+                let (socket, peer) = control.accept()?;
+                let shared = Shared::default();
+                shared.lock().unwrap().workers.insert(peer.ip(), 1);
+                serve_session(
+                    socket,
+                    key,
+                    rates,
+                    None,
+                    0,
+                    Slot(shared, peer.ip(), Rates::default(), None),
+                )
+            });
+            let mut channel = Control::authenticate(TcpStream::connect(addr)?, key, true)?;
+            channel.send(&Session {
+                version: 1,
+                mode,
+                max: rates,
+                flow_limit: 2,
+                timing_every: 0,
+                tcp_send_buffer: None,
+                udp_size: 1000,
+                overload_ms: 0,
+            })?;
+            let Admission::Ready {
+                tcp, udp, token, ..
+            } = channel.recv()?
+            else {
+                bail!("setup rejected")
+            };
+            let mut first = TcpStream::connect((addr.ip(), tcp))?;
+            first.write_all(&token)?;
+            let datagrams = UdpSocket::bind("127.0.0.1:0")?;
+            if mode == Mode::Combined {
+                datagrams.connect((addr.ip(), udp))?;
+                datagrams.set_read_timeout(Some(Duration::from_secs(3)))?;
+                datagrams.send(&token)?;
+            }
+            channel.send(&"joined")?;
+            thread::sleep(Duration::from_millis(320));
+            let mut last = TcpStream::connect((addr.ip(), tcp))?;
+            last.write_all(&token)?;
+            if mode == Mode::Combined {
+                let mut challenge = [0; 32];
+                ensure!(datagrams.recv(&mut challenge)? == 32);
+                channel.send(&challenge)?;
+            }
+            ensure!(channel.recv::<String>()? == "ready");
+            channel.send(&Request::Stop)?;
+            ensure!(channel.recv::<String>()? == "stopped");
+            ensure!(server.join().unwrap()? == "stopped");
+        }
+        Ok(())
+    }
+
     #[test]
     fn rate_units_are_exact_and_bounded() {
         for (text, expected) in [

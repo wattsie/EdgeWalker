@@ -78,7 +78,7 @@ class Native:
         line, self.buffer = self.buffer.split(b"\n", 1)
         message = json.loads(line)
         if message.get("status") == "data_setup_timeout":
-            raise DataSetupTimeout("admitted UDP path did not confirm readiness")
+            raise DataSetupTimeout("admitted data path did not confirm readiness")
         if message.get("status") == "peer_offline":
             raise PeerOffline("control endpoint unavailable")
         return message
@@ -1133,8 +1133,10 @@ def main():
                 rate = direction["active_delivered_bps"]
                 loss = whole.get("udp_loss_pct")
                 clean = direction["last_verified_clean_bps"]
-                print(f"{name}: active delivery {display_rate(rate) if rate is not None else 'unknown'}, "
-                      f"UDP loss {f'{loss:.2f}%' if loss is not None else 'n/a'}, "
+                cohort = direction["udp_cohort_bps"]
+                cohort_text = f"UDP sender-window delivery {display_rate(cohort)}, " if cohort is not None else ""
+                print(f"{name}: receiver-cutoff delivery {display_rate(rate) if rate is not None else 'unknown'}, "
+                      f"{cohort_text}UDP loss {f'{loss:.2f}%' if loss is not None else 'n/a'}, "
                       f"pending {whole.get('udp_pending', 0)}, last verified {display_rate(clean) if clean else 'unknown'}, "
                       f"verdict {direction['last_reason'] or 'unverified'}")
         return code

@@ -33,6 +33,8 @@ with tempfile.TemporaryDirectory() as tmp:
     with tarfile.open(args.package) as archive:
         for item in archive:
             p=Path(item.name)
+            if item.isdir() and not p.is_absolute() and '..' not in p.parts and item.mode == 0o755:
+                continue
             if not item.isfile() or p.is_absolute() or '..' in p.parts or len(p.parts)<2:
                 raise ValueError('unexpected archive item')
             dest=base/'package'/Path(*p.parts[1:])

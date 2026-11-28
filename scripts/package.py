@@ -145,11 +145,22 @@ def main():
                 ],
             ]:
                 t.add(src, name + "/" + target, recursive=False, filter=archive_metadata)
+            # Explicit directories let privileged GNU tar restore public program
+            # traversal permissions even when the installer's umask is 0027.
+            parents = {p for m in t.getmembers() for p in Path(m.name).parents if p != Path(".")}
+            for parent in sorted(parents):
+                directory = tarfile.TarInfo(parent.as_posix())
+                directory.type = tarfile.DIRTYPE
+                directory.mtime = int((ROOT / "Cargo.toml").stat().st_mtime)
+                directory.mode = 0o755
+                t.addfile(directory)
         with tarfile.open(archive) as t:
             # Smoke-test only the regular files just placed under this package
             # root. Bookworm build images may predate tarfile extraction filters.
             for member in t:
                 path = Path(member.name)
+                if member.isdir() and path.parts[:1] == (name,) and ".." not in path.parts and member.mode == 0o755:
+                    continue
                 if not member.isfile() or path.parts[:1] != (name,) or ".." in path.parts:
                     raise ValueError("unexpected package member")
                 destination = Path(tmp) / path

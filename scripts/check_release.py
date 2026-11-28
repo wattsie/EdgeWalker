@@ -28,6 +28,10 @@ def verify(directory):
         if target.startswith("linux-"):
             files.extend(SERVICE_FILES)
         with tarfile.open(archive) as package:
+            directories = {m.name for m in package if m.isdir() and m.mode == 0o755}
+            required = {str(parent) for m in package if m.isfile() for parent in Path(m.name).parents if parent != Path(".")}
+            if not required <= directories:
+                raise ValueError(f"{archive.name} lacks explicit traversable directories")
             for path in files:
                 member = package.getmember(f"{stem}/{path}")
                 if not member.isfile() or package.extractfile(member).read() != (ROOT / path).read_bytes():
