@@ -1,19 +1,26 @@
 """Create an offline TCP evidence ZIP using only selected measurement fields."""
 import argparse
 import csv
+from collections import defaultdict
 import io
 import json
 from pathlib import Path
 import re
+import sys
 import tempfile
 import zipfile
 
 
-def counts(run, rows, notes):
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from tcp_receipts import final_window_bytes, numeric_fields, tcp_final_accounting
+
+
+def counts(run, rows, notes, final):
+    confirmed = defaultdict(int)
     source = run / "windows.jsonl"
     if not source.is_file():
         notes.append("Window recording unavailable.")
-        return
+        return confirmed
     with source.open() as stream:
         for number, line in enumerate(stream, 1):
             try:
@@ -39,10 +46,17 @@ def counts(run, rows, notes):
                                   stats.get("srtt_us"), stats.get("cwnd_bytes")]
                         if any(v is not None and type(v) is not int for v in values):
                             raise ValueError("invalid measurement")
-                        window_rows.append([direction, *values])
+                        final_bytes = final_window_bytes(final, r["session"], direction, i - 1,
+                                                         w["id"], a["sent"])
+                        missing = None if final_bytes is None else a["sent"] * 1000 - final_bytes
+                        window_rows.append([direction, *values, final_bytes, missing])
                 rows.writerows(window_rows)
+                for row in window_rows:
+                    if row[-2] is not None:
+                        confirmed[row[0]] += row[-2]
             except (KeyError, ValueError, TypeError):
                 notes.append("Unreadable window receipt at line {}.".format(number))
+    return confirmed
 
 
 def main():
@@ -56,8 +70,12 @@ def main():
         p.error("run directory does not exist")
     notes = []
     summary = {"profile": args.profile, "client_exit": args.exit_code}
+    m = {}
     try:
         m = json.loads((run / "session.json").read_text())
+        if not isinstance(m, dict):
+            m = {}
+            raise ValueError("invalid manifest")
         patterns = {"native_version": r"edgewalker(?:-native)? [0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?", "started_utc": r"[0-9TZ.:+\-]+",
                     "ended_utc": r"[0-9TZ.:+\-]+", "status": r"running|completed|completed_with_gaps|failed|interrupted"}
         for key, pattern in patterns.items():
@@ -69,15 +87,28 @@ def main():
                 summary[key] = m[key]
     except (OSError, ValueError):
         notes.append("Session manifest unavailable or unreadable.")
+    final, receipt_notes, coverage = tcp_final_accounting(run, m)
+    summary["tcp_final_complete"] = coverage
+    summary["tcp_final"] = list(final.values())
+    summary["tcp_final_notes"] = receipt_notes
+    if isinstance(m.get("drain_settings"), dict):
+        summary["drain_settings"] = numeric_fields(
+            m["drain_settings"], ("min_ms", "max_ms", "rtt_multiplier", "jitter_ms"))
     data = io.StringIO()
     rows = csv.writer(data)
     rows.writerow(("direction", "session", "window", "start_ms", "decision_ms", "duration_ms",
                    "direction_offer_bps", "flow", "written_bytes", "cutoff_bytes", "through_drain_bytes",
                    "all_cohorts_at_cutoff_bytes", "sender_retransmissions", "sender_kernel_rtt_us",
-                   "sender_cwnd_bytes"))
-    counts(run, rows, notes)
+                   "sender_cwnd_bytes", "final_received_bytes", "final_outstanding_bytes"))
+    confirmed = counts(run, rows, notes, final)
     if len(data.getvalue().splitlines()) == 1:
         notes.append("No TCP flow rows available.")
+    expected = {"baseline": {"forward", "return"}, "higher-forward": {"forward"}, "higher-return": {"return"}}
+    if args.profile and not (set(confirmed) == expected[args.profile] and all(confirmed.values())
+                             and coverage and m.get("status") == "completed"
+                             and m.get("sessions") == 1 and m.get("stop_acknowledged") is True
+                             and args.exit_code == 0):
+        notes.append("Field check incomplete. Inspect the close receipts and client status.")
     summary["evidence_notes"] = notes
     events = io.StringIO()
     writer = csv.writer(events)
@@ -99,6 +130,7 @@ def main():
             archive.writestr("tcp-windows.csv", data.getvalue())
             archive.writestr("events.csv", events.getvalue())
     print("Review ZIP:", out.name)
+    print("TCP final receipt coverage:", "complete" if coverage else "incomplete or unavailable")
     for note in notes:
         print(note)
     return int(bool(notes))

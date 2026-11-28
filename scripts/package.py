@@ -13,6 +13,7 @@ import subprocess
 import tarfile
 import tempfile
 import tomllib
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -121,6 +122,9 @@ def main():
                 (ROOT / "edgewalker", "edgewalker"),
                 (ROOT / "README.md", "README.md"),
                 (ROOT / "Cargo.toml", "Cargo.toml"),
+                (ROOT / "validation/README.md", "validation/README.md"),
+                (ROOT / "validation/field.sh", "validation/field.sh"),
+                (ROOT / "validation/review.py", "validation/review.py"),
                 (ROOT / "docs/brief.md", "docs/brief.md"),
                 (ROOT / "docs/linux-server-service.md", "docs/linux-server-service.md"),
                 (ROOT / "docs/releasing.md", "docs/releasing.md"),
@@ -135,6 +139,7 @@ def main():
                         "replay.py",
                         "rates.py",
                         "records.py",
+                        "tcp_receipts.py",
                         "telemetry.py",
                         "html_report.py",
                     ]
@@ -225,6 +230,26 @@ def main():
                     result["directions"]["forward"]["phases"]["whole"]["received_bytes"]
                     > 0
                 )
+                tcp_run = Path(smoke) / "tcp"
+                subprocess.run(
+                    [cli, "run", "--connect", address, "--mode", "tcp",
+                     "--forward-max", "320k", "--return-max", "320k", "--flows", "1",
+                     "--flow-limit", "1", "--window-ms", "500", "--duration", "3",
+                     "--output", tcp_run],
+                    env=env, check=True, timeout=12,
+                )
+                receipt = json.loads((tcp_run / "tcp-final.jsonl").read_text())
+                assert receipt["status"] == "complete" and receipt["stop_acknowledged"]
+                for direction in ("forward", "return"):
+                    flow, = receipt["directions"][direction]
+                    assert flow["sent_records"] == flow["received_records"] > 0
+                subprocess.run(["sh", cli.parent / "validation/field.sh", "review", tcp_run],
+                               cwd=cli.parent, env=env, check=True, timeout=5)
+                bundle, = Path(smoke).glob("field-review-*.zip")
+                with zipfile.ZipFile(bundle) as z:
+                    summary = json.loads(z.read("session-summary.json"))
+                    assert summary["stop_acknowledged"] and summary["tcp_final_complete"]
+                    assert not summary["evidence_notes"] and not summary["tcp_final_notes"]
             finally:
                 server.terminate()
                 server.wait(timeout=5)

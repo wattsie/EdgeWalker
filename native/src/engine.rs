@@ -338,21 +338,162 @@ impl Counter {
     }
 }
 
+/// TCP delivers an ordered byte stream. A complete record extends the contiguous
+/// prefix for its original window; partial reads stay buffered across windows.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TcpCursor {
+    pub received_records: u64,
+    pub last_window: u32,
+    pub last_sequence: u64,
+}
+
+impl TcpCursor {
+    fn observe(&mut self, record: &[u8; SIZE], current: u32) -> Result<()> {
+        let window = u32::from_be_bytes(record[..4].try_into()?);
+        let seq = u64::from_be_bytes(record[4..12].try_into()?);
+        let expected = if window == self.last_window {
+            self.last_sequence + 1
+        } else {
+            1
+        };
+        ensure!(
+            record[20..24] == *b"EWD1"
+                && window > 0
+                && window <= current
+                && window >= self.last_window
+                && seq == expected
+                && seq <= 1_000_000,
+            "invalid TCP record order"
+        );
+        self.received_records = self
+            .received_records
+            .checked_add(1)
+            .context("TCP count overflow")?;
+        self.last_window = window;
+        self.last_sequence = seq;
+        Ok(())
+    }
+
+    pub fn validate(&self, expected: u64, last: u32) -> Result<()> {
+        ensure!(
+            self.received_records <= expected
+                && self.last_window <= last
+                && self.last_sequence <= self.received_records.min(1_000_000)
+                && (self.received_records == 0) == (self.last_window == 0)
+                && (self.received_records == 0) == (self.last_sequence == 0),
+            "invalid final receiver count"
+        );
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct TcpInput {
+    pending: Vec<u8>,
+    cursor: TcpCursor,
+}
+
+impl TcpInput {
+    fn consume(
+        &mut self,
+        data: &[u8],
+        window: u32,
+        mut visit: impl FnMut(&[u8; SIZE]) -> Result<()>,
+    ) -> Result<()> {
+        self.pending.extend_from_slice(data);
+        let (records, tail) = self.pending.as_chunks::<SIZE>();
+        let used = self.pending.len() - tail.len();
+        for record in records {
+            self.cursor.observe(record, window)?;
+            visit(record)?;
+        }
+        self.pending.drain(..used);
+        Ok(())
+    }
+}
+
 pub struct Flow {
     socket: TcpStream,
-    pending: Vec<u8>,
+    input: TcpInput,
+    pub sent_records: u64,
+    receive_limit: u64,
 }
+
 impl Flow {
     pub fn new(socket: TcpStream) -> Self {
         Self {
             socket,
-            pending: Vec::with_capacity(65536 + SIZE),
+            input: TcpInput::default(),
+            sent_records: 0,
+            receive_limit: 0,
         }
     }
 }
+
+/// Stop as soon as every flow reaches its sender's count. A partial record, EOF
+/// or a quiet socket can never extend the one deadline shared by all streams.
+pub fn finish_tcp(
+    flows: &mut [Flow],
+    expected: &[u64],
+    last_window: u32,
+    deadline: Instant,
+) -> Result<Vec<TcpCursor>> {
+    ensure!(expected.len() == flows.len(), "wrong final flow count");
+    for (f, &sent) in flows.iter().zip(expected) {
+        f.input.cursor.validate(sent, last_window)?;
+        ensure!(
+            sent <= f.receive_limit,
+            "final sender count exceeds reservation"
+        );
+        f.socket.set_nonblocking(true)?;
+    }
+    let mut ended = vec![false; flows.len()];
+    let mut buf = [0; 65536];
+    while Instant::now() < deadline {
+        let mut waiting = false;
+        let mut progress = false;
+        for ((f, &sent), closed) in flows.iter_mut().zip(expected).zip(&mut ended) {
+            if *closed || f.input.cursor.received_records == sent {
+                continue;
+            }
+            match f.socket.read(&mut buf) {
+                Ok(0) => *closed = true,
+                Ok(n) => {
+                    f.input.consume(&buf[..n], last_window, |_| Ok(()))?;
+                    f.input.cursor.validate(sent, last_window)?;
+                    progress = true;
+                }
+                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::Interrupted) => (),
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted
+                    ) =>
+                {
+                    *closed = true
+                }
+                Err(e) => return Err(e.into()),
+            }
+            waiting |= !*closed && f.input.cursor.received_records < sent;
+        }
+        if !waiting {
+            break;
+        }
+        if !progress {
+            thread::sleep(
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(Duration::from_millis(2)),
+            );
+        }
+    }
+    Ok(flows.iter().map(|f| f.input.cursor).collect())
+}
+
 fn read_tcp(
     tcp: &TcpStream,
-    pending: &mut Vec<u8>,
+    input: &mut TcpInput,
     w: Window,
     origin: Instant,
     cutoff: Instant,
@@ -366,15 +507,12 @@ fn read_tcp(
         match sock.read(&mut buf) {
             Ok(0) => bail!("data connection closed"),
             Ok(n) => {
-                pending.extend_from_slice(&buf[..n]);
-                let (records, tail) = pending.as_chunks::<SIZE>();
-                let used = pending.len() - tail.len();
                 let mut finished = false;
-                for record in records {
+                input.consume(&buf[..n], w.id, |record| {
                     c.add(record, w.id, origin, cutoff)?;
                     finished |= record[..4] == w.id.to_be_bytes() && &record[24..28] == b"EWTE";
-                }
-                pending.drain(..used);
+                    Ok(())
+                })?;
                 if finished {
                     break;
                 }
@@ -560,7 +698,7 @@ pub fn measure(
             let mut flows = Vec::new();
             for (i, flow) in tcp.iter_mut().enumerate() {
                 let sock = &flow.socket;
-                let pending = &mut flow.pending;
+                let tcp_input = &mut flow.input;
                 let i = i as u64;
                 let rate = if i < send_flows {
                     ts / send_flows + u64::from(i < ts % send_flows)
@@ -581,7 +719,7 @@ pub fn measure(
                 });
                 let reader = scope.spawn(move || {
                     if i < recv_flows && tr > 0 {
-                        read_tcp(sock, pending, w, origin, cutoff, end, cancel)
+                        read_tcp(sock, tcp_input, w, origin, cutoff, end, cancel)
                     } else {
                         Ok(Received::default())
                     }
@@ -636,12 +774,100 @@ pub fn measure(
         result
     });
     control.set_nonblocking(false)?;
-    result
+    let result = result?;
+    for (i, (f, lane)) in tcp.iter_mut().zip(&result.tcp).enumerate() {
+        f.sent_records = f
+            .sent_records
+            .checked_add(lane.sent)
+            .context("TCP count overflow")?;
+        if (i as u64) < recv_flows {
+            let rate = tr / recv_flows + u64::from((i as u64) < tr % recv_flows);
+            f.receive_limit = f
+                .receive_limit
+                .checked_add((u128::from(rate) * u128::from(w.ms) / u128::from(BITS * 1000)) as u64)
+                .context("TCP count overflow")?;
+        }
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn test_record(window: u32, seq: u64) -> [u8; SIZE] {
+        let mut data = [0u8; SIZE];
+        data[..4].copy_from_slice(&window.to_be_bytes());
+        data[4..12].copy_from_slice(&seq.to_be_bytes());
+        data[20..24].copy_from_slice(b"EWD1");
+        data
+    }
+
+    fn test_flow(limit: u64) -> Result<(Flow, TcpStream)> {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        let tx = TcpStream::connect(listener.local_addr()?)?;
+        let mut rx = Flow::new(listener.accept()?.0);
+        rx.receive_limit = limit;
+        Ok((rx, tx))
+    }
+
+    #[test]
+    fn tcp_finish_preserves_split_records_and_delayed_original_cohorts() -> Result<()> {
+        let (mut flow, mut tx) = test_flow(3)?;
+        let first = test_record(1, 1);
+        let tail = test_record(1, 2);
+        flow.input.consume(&first, 1, |_| Ok(()))?;
+        flow.input.consume(&tail[..317], 1, |_| Ok(()))?;
+        let writer = thread::spawn(move || -> Result<()> {
+            thread::sleep(Duration::from_millis(35));
+            tx.write_all(&tail[317..])?;
+            tx.write_all(&test_record(2, 1))?;
+            Ok(())
+        });
+        let begin = Instant::now();
+        let seen = finish_tcp(&mut [flow], &[3], 2, begin + Duration::from_secs(2))?;
+        assert!(begin.elapsed() < Duration::from_secs(1));
+        assert_eq!(
+            (
+                seen[0].received_records,
+                seen[0].last_window,
+                seen[0].last_sequence
+            ),
+            (3, 2, 1)
+        );
+        writer.join().unwrap()
+    }
+
+    #[test]
+    fn tcp_finish_bounds_all_open_flows_together_with_a_missing_suffix() -> Result<()> {
+        let (mut flows, peers): (Vec<_>, Vec<_>) = (0..8)
+            .map(|_| test_flow(2))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .unzip();
+        let mut last_peer = &peers[7];
+        last_peer.write_all(&test_record(3, 1))?;
+        // Eight quiet sockets stay open. Only one full record and half of the
+        // next arrive on the last stream; the others cannot delay its accounting.
+        last_peer.write_all(&test_record(3, 2)[..500])?;
+        let start = Instant::now();
+        let seen = finish_tcp(&mut flows, &[2; 8], 3, start + Duration::from_millis(100))?;
+        assert!(start.elapsed() >= Duration::from_millis(90));
+        assert!(start.elapsed() < Duration::from_millis(600));
+        assert!(seen[..7].iter().all(|r| r.received_records == 0));
+        assert_eq!((seen[7].received_records, seen[7].last_sequence), (1, 1));
+        assert_eq!(flows[7].input.pending.len(), 500);
+        Ok(())
+    }
+
+    #[test]
+    fn tcp_final_counts_require_contiguous_records_and_an_admitted_sender_total() -> Result<()> {
+        let (mut f, _peer) = test_flow(1)?;
+        assert!(f.input.consume(&test_record(1, 2), 1, |_| Ok(())).is_err());
+        assert!(f.input.consume(&[], 1, |_| Ok(())).is_err());
+        assert!(finish_tcp(&mut [f], &[2], 1, Instant::now()).is_err());
+        Ok(())
+    }
+
     #[test]
     fn close_window_drains_delayed_payload_and_preserves_a_real_gap() {
         let receiver = UdpSocket::bind("127.0.0.1:0").unwrap();

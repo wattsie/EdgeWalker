@@ -7,6 +7,11 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+if __package__:
+    from .tcp_receipts import tcp_final_accounting
+else:
+    from tcp_receipts import tcp_final_accounting
+
 
 def timestamp():
     return datetime.now(timezone.utc).isoformat()
@@ -209,4 +214,9 @@ def report(directory):
             for d in result["directions"].values()
         )
     )
+    if manifest.get("mode") in ("tcp", "combined"):
+        sessions, notes, complete = tcp_final_accounting(directory, manifest)
+        result["tcp_final"] = dict(sessions=list(sessions.values()), evidence_notes=notes,
+                                   coverage_complete=complete)
+        result["coverage_complete"] &= complete
     return result

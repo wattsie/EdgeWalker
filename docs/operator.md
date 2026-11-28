@@ -52,6 +52,14 @@ UDP defaults to 1,000-byte sequenced records (set `--udp-size` to 128–9,000 by
 
 TCP starts with one active connection per direction. The engine prepares up to `--flow-limit` data sockets at admission. The controller activates an additional flow when aggregate goodput stays below the offer and checks the gain. Use `--flows N` for a fixed count, within the configured flow limit. Use `--tcp-send-buffer BYTES` to request a per-socket send buffer during controlled comparisons. The raw record retains each flow's measured bytes, congestion window, retransmission counters and kernel RTT where available. A TCP-only report leaves UDP loss unavailable.
 
+### Final TCP receiver receipt
+
+At close, the peers exchange per-flow counts of 1,000-byte TCP application records. Both directions share one monotonic deadline. Sending has finished. Reads can return early when every flow is accounted for. A late arrival credits its original sending window and the deadline stays fixed. Combined mode records the TCP receipt separately from UDP sequence accounting.
+
+The client measures the round trip from an authenticated window request to its gateway acknowledgement. The default allowance is three times that RTT plus 100 ms, bounded by a 250 ms minimum and a 5,000 ms maximum. An absent sample or one older than 15 seconds uses the maximum. The gateway can lower the effective maximum. On a 640 ms control RTT the default calculation yields 2,020 ms. Actual wait can be shorter, including when the last window has already consumed some of the closing budget.
+
+The saved plan accepts a top-level `"drain": {"min_ms": 250, "max_ms": 5000, "rtt_multiplier": 3, "jitter_ms": 100}` alongside its direction objects. Client flags override these values. The menu accepts the same settings at setup and includes them when saving a plan.
+
 ## Controller settings
 
 The default starting offer is the requested directional maximum. Set `--forward-start` or `--return-start` to ramp from a lower rate. For per-direction policies, pass `--plan plan.json`. Each active direction has a JSON object under `forward` or `return`. For example:
@@ -80,6 +88,10 @@ Save the example JSON as `forward-plan.json`. From the client terminal, launch a
 The CLI's `--window-ms` sets the common native sampling interval. The per-direction window and packet gates set minimum evidence for a clean decision. Timing-aware control uses successive thirds of receiver transit samples. Absolute one-way delay needs synchronised clocks. Excess delay uses a directional baseline and growth uses within-stream changes. For an open UDP sequence range the controller compares receiver-interval arrival rates across the hold. It can use newly arrived timing samples from the previous window when both windows had the same offer. The series records the timing source and throughput used for that decision. Set `loss_only` to true to use loss-driven UDP decisions. Controller thresholds are provisional.
 
 ## Records and verification
+
+For TCP and combined runs, `tcp-final.jsonl` holds one close outcome per admitted session where the recorder could persist it. Each flow reports sender-written and receiver-confirmed record counts, and the window and sequence of its last confirmed record. Ordered TCP delivery lets the offline reader credit all records in earlier recorded windows and the confirmed prefix of the last one. A replacement session starts its own accounting. The standalone field CSV includes both the original cutoff measurements and the final count for each recorded sender window.
+
+`edgewalker report RUN_DIR` includes `tcp_final` with each session's status, per-flow counts, outstanding records, close timing and coverage. Missing receiver information is null. A count below the sender total gives the number still unconfirmed at close. Neither case establishes TCP packet loss. The original rate decisions and active-window goodput remain available for interpretation.
 
 Choose a new output directory for every run. `session.json` records settings, software version, status and termination. `windows.jsonl` retains incremental native endpoint receipts. `series-fl.csv` and `series-rl.csv` contain measured and requested rates, decisions, phase, coverage and timing. `events.csv` records state changes, interruption and replacement sessions. UTC and local timestamps accompany window records. A process killed before finalisation can leave a running manifest alongside its completed window records. The report preserves that incomplete status.
 
@@ -201,6 +213,7 @@ A report reads an existing run directory and prints JSON, including recorded cov
 | `--config PATH` | On `server`, `run` and `calibrate`, selects a JSON file containing a string field named `key`. With no flag, lookup order is `EDGEWALKER_CONFIG`, `$XDG_CONFIG_HOME/edgewalker/config.json` when set, then `~/.config/edgewalker/config.json`. Provision the same lab key at each endpoint. |
 | `--key KEY` | On `server` and `run`, overrides config lookup for this invocation. Accepts 12–16 characters. A literal command-line value can appear in process listings or shell history. The examples use a config file. |
 | `--listen IP:PORT` | Defaults to `127.0.0.1:62000`. Set the local test-interface address for remote clients. Use port 0 to select an available port and read the emitted `listening` value. Use brackets around an IPv6 literal, e.g. `[::1]:62000`. |
+| `--drain-max-ms MS` | Maximum final TCP receipt wait the gateway grants each session, 1–30000 ms, default 5000. The client can choose a smaller maximum. |
 | `--capacity BPS` | Sets the aggregate capacity of **each** server pool across its concurrent sessions. Supply this or both `--tx` and `--rx`. |
 | `--tx BPS`, `--rx BPS` | Set server transmit (forward) and receive (return) pools independently. Both are required together; `--capacity` is mutually exclusive. A reservation that exceeds either available pool is rejected before bulk traffic starts. |
 | `--data-ports FIRST-LAST` | Inclusive range 1–65535 for server data listeners, e.g. `62001-62008`. First must be at most last. The default is `62001-62008`; specify `auto` for OS-allocated ports. The control address comes from `--listen`. |
@@ -221,6 +234,9 @@ A report reads an existing run directory and prints JSON, including recorded cov
 | `--udp-size BYTES` | UDP record size including its measurement header, 128–9000 bytes, default 1000. Choose a size the path MTU supports. The window budget uses the smaller of this value and 1000, including TCP mode. |
 | `--timing-every N` | Default 32. Request a UDP timing reply once per N data records. Zero disables these replies. Applies to UDP and combined mode. Timing replies use the directional budget. |
 | `--flow-limit N` | Maximum prepared TCP connections for a session and default allowed active count per direction, 1–16, default 4. Per-direction plan settings can override it. The engine provisions the largest active direction's limit. |
+| `--drain-min-ms MS`, `--drain-max-ms MS` | Client bounds for a session-final TCP receipt. Defaults 250 and 5000 ms. Set 1 ≤ minimum ≤ maximum ≤ 30000. The gateway cap can reduce the effective allowance below the client minimum. |
+| `--drain-rtt-multiplier N` | Integer 1–100, default 3. Multiplies a fresh end-to-end control RTT. |
+| `--drain-jitter-ms MS` | Fixed extra allowance for delay variation, 0–30000 ms, default 100. |
 | `--flows N` | Fixes the active TCP count per direction, from 1 through the flow limit. When omitted, automatic scaling begins with one flow and tries more when a shortfall persists. A plan can override these flow settings. |
 | `--tcp-send-buffer BYTES` | Request a per-socket TCP sender buffer at both endpoints, 8192–4194304 bytes. Omit for the OS default. Effective buffer size depends on the OS. |
 | `--overload-ms MS` | Request one bounded ceiling-rate window after clean verification below the ceiling. Default 0 disables it. Nonzero values must be 250–10000 ms, fit the window budget and stay within the server's allowance. The run needs enough time and a qualifying observation to trigger it. |

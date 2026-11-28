@@ -7,8 +7,9 @@ After=network-online.target
 Type=simple
 User=edgewalker
 Group=edgewalker
+Environment=EDGEWALKER_DRAIN_MAX_MS=5000
 EnvironmentFile=/etc/edgewalker/server.env
-ExecStart=/opt/edgewalker-server/bin/edgewalker-native server --config /etc/edgewalker/config.json --listen ${EDGEWALKER_LISTEN} --capacity ${EDGEWALKER_CAPACITY} --data-ports ${EDGEWALKER_DATA_PORTS}
+ExecStart=/opt/edgewalker-server/bin/edgewalker-native server --config /etc/edgewalker/config.json --listen ${EDGEWALKER_LISTEN} --capacity ${EDGEWALKER_CAPACITY} --data-ports ${EDGEWALKER_DATA_PORTS} --drain-max-ms ${EDGEWALKER_DRAIN_MAX_MS}
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true

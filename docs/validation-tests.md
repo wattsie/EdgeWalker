@@ -1,6 +1,6 @@
 # Validation Tests
 
-EdgeWalker satellite field guide for the interactive prerelease `0.2.2-rc.6`.
+EdgeWalker satellite field guide for the interactive prerelease `0.2.2-rc.7`.
 
 Start with a 30-second forward TCP test to verify the route, delivery and shutdown. Then compare one TCP connection with two under the same total offer. UDP calibration is a separate, optional test. All commands run locally from the extracted package directory. Each client run needs a new output directory.
 
@@ -10,7 +10,7 @@ Take the appropriate release archive and a way to provision the shared key secur
 
 ### Intel and AMD Linux field installation
 
-**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.6). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. The compatibility archive includes CPython 3.11 for client commands.
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.7). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. The compatibility archive includes CPython 3.11 for client commands.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -25,8 +25,8 @@ For the standard package and Python launcher below, proceed if the results are `
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.6
-archive=edgewalker-0.2.2-rc.6-linux-x86_64.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.7
+archive=edgewalker-0.2.2-rc.7-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256"
@@ -35,7 +35,7 @@ curl -fLO "$release/$archive" &&
 **Single-file handoff.** If you already verified the checksum on the connected machine and transferred only the archive using a trusted copy method, run this on the field host:
 
 ```sh
-archive=edgewalker-0.2.2-rc.6-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.7-linux-x86_64.tar.gz
 tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
   ./bin/edgewalker-native --version && ./edgewalker --menu --help
 ```
@@ -43,7 +43,7 @@ tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
 **With the checksum onsite**, use this alternative from the download directory:
 
 ```sh
-archive=edgewalker-0.2.2-rc.6-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.7-linux-x86_64.tar.gz
 sha256sum -c "$archive.sha256" &&
   tar -xzf "$archive" &&
   cd "${archive%.tar.gz}" &&
@@ -51,23 +51,23 @@ sha256sum -c "$archive.sha256" &&
   ./edgewalker --menu --help
 ```
 
-Expect the archive checksum to report `OK`, native version `0.2.2-rc.6`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
+Expect the archive checksum to report `OK`, native version `0.2.2-rc.7`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
 
 ### ARM installations
 
-For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.6) and the appropriate block below.
+For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.7) and the appropriate block below.
 
 Linux ARM64:
 
 ```sh
-archive=edgewalker-0.2.2-rc.6-linux-aarch64.tar.gz
+archive=edgewalker-0.2.2-rc.7-linux-aarch64.tar.gz
 sha256sum -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
 Apple silicon:
 
 ```sh
-archive=edgewalker-0.2.2-rc.6-darwin-arm64.tar.gz
+archive=edgewalker-0.2.2-rc.7-darwin-arm64.tar.gz
 shasum -a 256 -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
@@ -79,7 +79,7 @@ python3 --version
 ./edgewalker --menu --help
 ```
 
-Expect native version `0.2.2-rc.6`.
+Expect native version `0.2.2-rc.7`.
 
 ### Shared key on all platforms
 
@@ -196,7 +196,7 @@ At roughly 640 ms RTT, allow 60 seconds for a first bidirectional check. Authent
 ./edgewalker report udp-check
 ```
 
-Use RC6 at both ends. When a receiver snapshot has an open UDP tail, the peers exchange an authenticated sender count and collect outstanding datagrams for up to one additional second at each receiver. The client allows up to three seconds after the run deadline to collect the outstanding receipt. This exchange sends no further test payload. A missing packet followed by a higher sequence counts as loss even if it arrives later. Silence at the final sequence leaves that suffix pending. An interrupted control channel can also leave coverage incomplete.
+Use RC7 at both ends. When a receiver snapshot has an open UDP tail, the peers exchange an authenticated sender count and collect outstanding datagrams for up to one additional second at each receiver. The client allows up to three seconds after the run deadline to collect the outstanding receipt. This exchange sends no further test payload. A missing packet followed by a higher sequence counts as loss even if it arrives later. Silence at the final sequence leaves that suffix pending. An interrupted control channel can also leave coverage incomplete.
 
 In each direction compare active-window delivered rate (`active_delivered_bps`) with `udp_cohort_bps`, the unique UDP bytes observed for those sender windows divided by their combined duration. The series preserves the original cutoff measurement. Check `coverage_complete`, pending ranges, and the last controller reason before treating a zero loss count as a clean result. Neither rate includes setup or inter-window pauses.
 
@@ -206,9 +206,9 @@ For a 1 Mbps bidirectional UDP run with five-second windows, field checks on a r
 
 When TCP setup ends before the first window, collect the gateway journal for the matching peer and time. Record the negotiated port, transport, prepared flow count and end reason. All prepared TCP flows in one session use the same destination port. Combined mode also binds UDP at that number. Successful UDP delivery alone does not verify TCP data-port reachability.
 
-## RC6 satellite retest for TCP and combined mode
+## RC7 satellite retest for TCP and combined mode
 
-Use the same RC6 package version at both sites. On a systemd gateway, after replacing the service executable and restarting the service, verify the running process. Check that the configured capacity admits 1 Mbps in each direction and that its control and negotiated data ports are reachable.
+Use the same RC7 package version at both sites. On a systemd gateway, after replacing the service executable and restarting the service, verify the running process. Check that the configured capacity admits 1 Mbps in each direction and that its control and negotiated data ports are reachable.
 
 ```sh
 systemctl is-active edgewalker-server
@@ -223,7 +223,7 @@ GATEWAY='replace-with-gateway-address'
 edgewalker --version
 trial=$(date -u +%Y%m%dT%H%M%SZ)
 for mode in tcp combined; do
-  out="rc6-${mode}-${trial}"
+  out="rc7-${mode}-${trial}"
   edgewalker run --connect "${GATEWAY}:62000" --mode "$mode" \
     --forward-max 1M --return-max 1M --duration 30 --output "$out"
   rc=$?
@@ -232,8 +232,62 @@ for mode in tcp combined; do
 done
 ```
 
+### One-command field comparison
+
+The archive includes the [field validation scripts](../validation/README.md). With RC7 installed at both ends, verify the gateway can admit 1 Mbps per direction and confirm fresh terminal monitoring. Run the baseline once from a writable client directory. Set the absolute launcher path when the package directory is read-only. Use your existing protected config or set `EDGEWALKER_CONFIG` to its path.
+
+```sh
+GATEWAY='your-gateway:62000'
+PACKAGE='/absolute/path/to/extracted-package'
+export EDGEWALKER_CLI="$PACKAGE/edgewalker"
+sh "$PACKAGE/validation/field.sh" baseline "$GATEWAY"
+```
+
+Check that the ZIP summary shows one completed session, an acknowledged stop, final TCP coverage complete and zero outstanding records in every flow. Compare the cutoff, through-drain and final confirmed byte counts in the CSV. An incomplete receipt can still confirm a prefix of each TCP stream. Keep the ZIP from an incomplete or interrupted run as evidence.
+
+For an approved higher-rate comparison, run each command separately with a healthy terminal. Each lasts 60 seconds and requests one flow at 1.5 Mbps. Check terminal events and traffic health before starting the other direction.
+
+```sh
+sh "$PACKAGE/validation/field.sh" higher-forward "$GATEWAY"
+```
+
+```sh
+sh "$PACKAGE/validation/field.sh" higher-return "$GATEWAY"
+```
+
 For each mode, check for one session, positive TCP goodput in both series files, acknowledged stop, complete coverage and no replacement. In combined mode also check UDP sent, lost and pending counts separately. A clean first attempt matters for this regression, even if a replacement later succeeds. If setup fails, keep the entire run directory and correlate its UTC timestamps with the gateway journal.
 
 ```sh
 sudo journalctl -u edgewalker-server --since '10 minutes ago' --utc --no-pager
 ```
+
+### Interpreting a high-RTT TCP run
+
+At roughly 640 ms RTT, use 30 seconds for a startup smoke test. For a rate comparison, start with 60 seconds at the same approved ceiling and one fixed flow (`--flows 1 --flow-limit 1`). Compare successive full five-second windows after startup. Sixty seconds is a proposed observation period for TCP. The field trial verified that duration for UDP only. Keep terminal monitoring active when assessing service impact.
+
+For TCP, RC7 uses a configurable end-to-end closing allowance. Check the chosen budget and actual wait in the final receipt. A deadline gap means that receipt was unavailable. The run's elapsed time alone does not establish when the final payload arrived. Correlate the client events and the gateway journal by time. A gateway EOF establishes that its control peer closed the connection; the client records its own reason.
+
+For archived RC6 runs, the current-window cutoff and per-window drain counters remain available. RC7 additionally provides a session-final receipt. To distinguish a low sender rate from delayed delivery, run the following on an existing client's results directory. It uses recorded TCP application records of 1,000 bytes each. The three rates use the same sender-window duration. The last includes bytes received during the bounded drain, so it is a lower bound if the receipt still lacks records. A missing window has no measurement.
+
+```sh
+python3 - "$RUN_DIR/windows.jsonl" <<'PY'
+import json, sys
+print("session window direction flows offer_kbps written_kbps cutoff_kbps through_drain_kbps")
+with open(sys.argv[1]) as records:
+    for line in records:
+        r = json.loads(line)
+        w = r["window"]
+        for direction, sender, receiver in (("forward","server","client"), ("reverse","client","server")):
+            if not w["rates"][direction] or not r[sender]["tcp"]:
+                continue
+            tx = sum(f["sent"] for f in r[sender]["tcp"]) * 1000
+            rx = [f["received"] for f in r[receiver]["tcp"]]
+            cutoff = sum(f["window_bytes"] for f in rx)
+            drained = sum(f["bytes"] for f in rx)
+            print(r["session"], w["id"], direction, w["flows"][direction],
+                  w["rates"][direction]/1000,
+                  *(round(b*8/w["ms"], 1) for b in (tx, cutoff, drained)))
+PY
+```
+
+The offer column includes the canary in combined mode. Use TCP-only recordings for a direct comparison against a 1 Mbps TCP offer.

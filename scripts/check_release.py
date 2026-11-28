@@ -25,6 +25,8 @@ def verify(directory):
         if checksum.read_text().split() != [digest, archive.name]:
             raise ValueError(f"incorrect checksum or filename in {checksum.name}")
         files = ["README.md", "docs/validation-tests.md", "docs/linux-server-service.md"]
+        files.extend(("validation/README.md", "validation/field.sh", "validation/review.py",
+                      "src/tcp_receipts.py"))
         if target.startswith("linux-"):
             files.extend(SERVICE_FILES)
         with tarfile.open(archive) as package:

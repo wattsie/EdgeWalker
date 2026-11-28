@@ -9,8 +9,8 @@ Run these commands on the server. Expect `x86_64` and `glibc 2.17` or newer. Fro
 ```sh
 uname -m
 getconf GNU_LIBC_VERSION
-archive=edgewalker-0.2.2-rc.6-linux-x86_64-glibc2.17.tar.gz
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.6
+archive=edgewalker-0.2.2-rc.7-linux-x86_64-glibc2.17.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.7
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256" &&
@@ -18,7 +18,7 @@ curl -fLO "$release/$archive" &&
   ./bin/edgewalker-native --version
 ```
 
-The embedded engine version is 0.2.2-rc.6. Keep this directory available for the service files and field guide.
+The embedded engine version is 0.2.2-rc.7. Keep this directory available for the service files and field guide.
 
 ## Install the gateway
 
@@ -67,6 +67,8 @@ Expect `enabled`, `active` and a journal entry showing the chosen listening addr
 ## Upgrade an existing service
 
 The install commands preserve an existing `/etc/edgewalker/server.env`. Between tests, edit it with `sudoedit /etc/edgewalker/server.env`. Keep the chosen test-interface IP and capacity, change the port on `EDGEWALKER_LISTEN` to `62000`, and set `EDGEWALKER_DATA_PORTS=62001-62008`. Update client connection addresses and any firewall or NAT rules before switching. Restart with `sudo systemctl restart edgewalker-server.service` and verify the listener with `sudo ss -ltnp 'sport = :62000'`.
+
+The service reads `EDGEWALKER_DRAIN_MAX_MS` from the environment file when present. It defaults to 5000 ms. Use a value from 1 to 30000 to cap the negotiated final TCP recording period. The client can request a shorter period.
 
 ## Four clients on one service
 

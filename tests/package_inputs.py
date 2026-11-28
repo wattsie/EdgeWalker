@@ -79,10 +79,10 @@ with tempfile.TemporaryDirectory() as tmp:
     launch=basic+['--output',work/'invalid','--duration','1']
     server=['--listen',noaddr,'--capacity','400000']
     for pr,cmd,common,values in [
-        ('launcher','run',launch,['--connect','--mode','--duration','--window-ms','--udp-size','--overload-ms','--timing-every','--tcp-send-buffer','--flow-limit','--flows','--telemetry-interval','--forward-max','--return-max','--forward-start','--return-start']),
+        ('launcher','run',launch,['--connect','--mode','--duration','--window-ms','--udp-size','--overload-ms','--timing-every','--tcp-send-buffer','--flow-limit','--flows','--drain-min-ms','--drain-max-ms','--drain-rtt-multiplier','--drain-jitter-ms','--telemetry-interval','--forward-max','--return-max','--forward-start','--return-start']),
         ('native','client',basic,['--connect','--mode','--forward-max','--return-max','--udp-size','--overload-ms','--timing-every','--tcp-send-buffer','--flow-limit']),
-        ('launcher','server',server,['--listen','--data-ports','--capacity','--allow-overload-ms','--tx','--rx']),
-        ('native','server',server,['--listen','--data-ports','--capacity','--allow-overload-ms','--tx','--rx'])]:
+        ('launcher','server',server,['--listen','--data-ports','--capacity','--allow-overload-ms','--drain-max-ms','--tx','--rx']),
+        ('native','server',server,['--listen','--data-ports','--capacity','--allow-overload-ms','--drain-max-ms','--tx','--rx'])]:
         for flag in values:
             tokens=list(common)
             if flag in tokens:

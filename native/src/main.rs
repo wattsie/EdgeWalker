@@ -49,6 +49,9 @@ enum Command {
         data_ports: PortSelection,
         #[arg(long, default_value_t = 0)]
         allow_overload_ms: u64,
+        /// Maximum final TCP receipt budget for a session, in milliseconds.
+        #[arg(long, default_value_t = 5000, value_parser=clap::value_parser!(u64).range(1..=30000))]
+        drain_max_ms: u64,
         #[arg(value_parser = parse_rate, long, conflicts_with_all=["tx","rx"])]
         capacity: Option<u64>,
         #[arg(value_parser = parse_rate, long, requires = "rx")]
@@ -144,6 +147,8 @@ enum Admission {
         resize: bool,
         #[serde(default)]
         reconcile: bool,
+        #[serde(default)]
+        drain_max_ms: u64,
     },
     Rejected {
         requested: Rates,
@@ -412,9 +417,16 @@ impl Slot {
 #[derive(Serialize, Deserialize)]
 enum Request {
     Window(Window, u64),
-    Reconcile { window: u32, sent: u64 },
+    Reconcile {
+        window: u32,
+        sent: u64,
+    },
     Resize(Rates),
     Ready(u32),
+    Finish {
+        read_ms: u64,
+        sent_records: Vec<u64>,
+    },
     Stop,
 }
 fn reserved_rates(plan: &Session, rates: Rates) -> Rates {
@@ -441,10 +453,12 @@ fn serve_session(
     cap: Rates,
     ports: Option<(u16, u16)>,
     allow_overload_ms: u64,
+    drain_max_ms: u64,
     mut slot: Slot,
 ) -> Result<&'static str> {
     let local = s.local_addr()?;
-    let peer = s.peer_addr()?.ip();
+    let control_peer = s.peer_addr()?;
+    let peer = control_peer.ip();
     let mut c = match Control::authenticate(s, key, false) {
         Ok(c) => c,
         Err(e) => {
@@ -483,7 +497,7 @@ fn serve_session(
         return Ok("ports_exhausted");
     };
     eprintln!(
-        "session admitted peer={peer} mode={:?} tcp_port={:?} udp_port={:?} forward_max_bps={} return_max_bps={} prepared_flows={}",
+        "session admitted peer={peer} control_peer={control_peer} mode={:?} tcp_port={:?} udp_port={:?} forward_max_bps={} return_max_bps={} prepared_flows={}",
         plan.mode,listener.as_ref().map(|_|port),udp.as_ref().map(|_|port),plan.max.forward,plan.max.reverse,plan.flow_limit
     );
     let token = random()?;
@@ -493,6 +507,7 @@ fn serve_session(
         token,
         resize: true,
         reconcile: true,
+        drain_max_ms,
     })?;
     // The client opens its admitted sockets in order before acknowledging the join.
     c.0.set_read_timeout(Some(join_timeout(plan.mode, plan.flow_limit)))?;
@@ -502,7 +517,7 @@ fn serve_session(
     if let Some(listener) = &listener {
         listener.set_nonblocking(true)?;
         let deadline = Instant::now() + Duration::from_secs(5);
-        for _ in 0..plan.flow_limit {
+        for index in 0..plan.flow_limit {
             let (mut flow, addr) = accept_by(listener, deadline).context("tcp_accept")?;
             ensure!(addr.ip() == peer, "unexpected data peer");
             flow.set_read_timeout(Some(
@@ -514,6 +529,7 @@ fn serve_session(
             flow.read_exact(&mut proof).context("tcp_token_read")?;
             ensure!(proof == token, "invalid data token");
             io_settings(&flow, plan.tcp_send_buffer)?;
+            eprintln!("tcp flow joined control_peer={control_peer} flow={} data_peer={addr} data_port={port}", index+1);
             tcp.push(engine::Flow::new(flow));
         }
     }
@@ -542,7 +558,10 @@ fn serve_session(
     let mut previous_udp = None;
     let mut reconcile_limit = None;
     loop {
-        let (w, peer_base) = match c.recv::<Request>()? {
+        let request = c.recv::<Request>().inspect_err(|_| {
+            eprintln!("session interrupted control_peer={control_peer} stage=await_command last_window={prev}");
+        })?;
+        let (w, peer_base) = match request {
             Request::Window(w, base) => (w, base),
             Request::Reconcile { window, sent } => {
                 let limit = reconcile_limit.take().context("no open UDP window")?;
@@ -582,6 +601,32 @@ fn serve_session(
                 c.send(&result)?;
                 continue;
             }
+            Request::Finish {
+                read_ms,
+                sent_records,
+            } => {
+                ensure!(
+                    plan.mode != Mode::Udp && read_ms <= drain_max_ms,
+                    "invalid final TCP budget"
+                );
+                let started = Instant::now();
+                let cursors = engine::finish_tcp(
+                    &mut tcp,
+                    &sent_records,
+                    prev,
+                    started + Duration::from_millis(read_ms),
+                )?;
+                drop(tcp);
+                drop(udp);
+                drop(listener);
+                drop(slot);
+                let remaining = Duration::from_millis(drain_max_ms)
+                    .saturating_sub(started.elapsed())
+                    .max(Duration::from_millis(1));
+                c.0.set_write_timeout(Some(remaining))?;
+                c.send(&cursors)?;
+                return Ok("stopped");
+            }
             Request::Stop => break,
         };
         validate(w, &plan, prev)?;
@@ -608,11 +653,20 @@ fn serve_session(
                 every: plan.timing_every,
                 udp_size: plan.udp_size,
             },
-        )?;
+        )
+        .inspect_err(|_| {
+            eprintln!(
+                "session interrupted control_peer={control_peer} stage=measure window={prev}"
+            );
+        })?;
         reconcile_limit = (plan.mode != Mode::Tcp)
             .then(|| engine::udp_count_limit(w.rates.reverse, plan.mode, w.ms, plan.udp_size));
         base += result.udp.sent;
-        c.send(&result)?;
+        c.send(&result).inspect_err(|_| {
+            eprintln!(
+                "session interrupted control_peer={control_peer} stage=send_report window={prev}"
+            );
+        })?;
     }
     drop(tcp);
     drop(udp);
@@ -626,6 +680,7 @@ fn server(
     cap: Rates,
     ports: Option<(u16, u16)>,
     allow_overload_ms: u64,
+    drain_max_ms: u64,
     key: String,
 ) -> Result<()> {
     let listener = TcpListener::bind(listen)?;
@@ -637,7 +692,8 @@ fn server(
     let key = Arc::new(key);
     for sock in listener.incoming() {
         let s = sock?;
-        let peer = s.peer_addr()?.ip();
+        let control_peer = s.peer_addr()?;
+        let peer = control_peer.ip();
         let mut l = ledger.lock().unwrap();
         l.failed.retain(|_, t| t.elapsed() < Duration::from_secs(2));
         if l.failed.contains_key(&peer)
@@ -653,7 +709,7 @@ fn server(
         let key = key.clone();
         thread::spawn(move || {
             let started = Instant::now();
-            let outcome = serve_session(s, &key, cap, ports, allow_overload_ms, slot);
+            let outcome = serve_session(s, &key, cap, ports, allow_overload_ms, drain_max_ms, slot);
             let reason = match &outcome {
                 Ok(reason) => *reason,
                 Err(e) => match e.to_string().as_str() {
@@ -670,7 +726,7 @@ fn server(
                 },
             };
             eprintln!(
-                "connection ended peer={peer} orderly={} duration_ms={} reason={reason}",
+                "connection ended peer={peer} control_peer={control_peer} orderly={} duration_ms={} reason={reason}",
                 outcome.is_ok(),
                 started.elapsed().as_millis()
             );
@@ -683,6 +739,81 @@ fn server(
 struct ResizeInput {
     resize: Rates,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FinishInput {
+    finish_ms: u64,
+}
+
+fn finish_client(
+    c: &mut Control,
+    tcp: &mut [engine::Flow],
+    remote_sent: &[u64],
+    last: u32,
+    budget_ms: u64,
+    rtt_ms: Option<u64>,
+) -> Result<()> {
+    let budget = Duration::from_millis(budget_ms);
+    let deadline = Instant::now() + budget;
+    let sent_records: Vec<_> = tcp.iter().map(|f| f.sent_records).collect();
+    // Reserve an application RTT (including both control transits) and a small
+    // scheduler margin so a short receiver count can itself reach the client.
+    let transit_ms = rtt_ms.unwrap_or(budget_ms / 2).saturating_add(10);
+    let request = Request::Finish {
+        read_ms: budget_ms.saturating_sub(transit_ms),
+        sent_records: sent_records.clone(),
+    };
+    let (remote, local) = thread::scope(|scope| {
+        let response = scope.spawn(|| -> Result<Vec<engine::TcpCursor>> {
+            c.0.set_write_timeout(Some(budget))?;
+            c.send(&request)?;
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            ensure!(!remaining.is_zero(), "final control deadline");
+            c.0.set_read_timeout(Some(remaining))?;
+            let cursors: Vec<engine::TcpCursor> = c.recv()?;
+            ensure!(
+                cursors.len() == sent_records.len(),
+                "final receipt flow count mismatch"
+            );
+            for (cursor, &n) in cursors.iter().zip(&sent_records) {
+                cursor.validate(n, last)?;
+            }
+            Ok(cursors)
+        });
+        let local = engine::finish_tcp(tcp, remote_sent, last, deadline);
+        (response.join().expect("final control worker"), local)
+    });
+    let local = local?;
+    let row = |sent, received: Option<&engine::TcpCursor>| {
+        json!({
+            "sent_records":sent,
+            "received_records":received.map(|r|r.received_records),
+            "last_window":received.map(|r|r.last_window),
+            "last_sequence":received.map(|r|r.last_sequence),
+        })
+    };
+    let forward: Vec<_> = remote_sent
+        .iter()
+        .zip(&local)
+        .map(|(&n, r)| row(n, Some(r)))
+        .collect();
+    let reverse: Vec<_> = sent_records
+        .iter()
+        .enumerate()
+        .map(|(i, &n)| row(n, remote.as_ref().ok().map(|v| &v[i])))
+        .collect();
+    let status = if remote.is_ok() {
+        "stopped"
+    } else {
+        "unconfirmed"
+    };
+    println!(
+        "{}",
+        json!({"status":status,"tcp_final":{"forward":forward,"return":reverse}})
+    );
+    Ok(())
+}
+
 fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
     validate_session(&plan)?;
     let sock = TcpStream::connect_timeout(&addr, Duration::from_secs(5)).inspect_err(|e| {
@@ -699,16 +830,18 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
     let local = sock.local_addr()?.ip();
     let mut c = Control::authenticate(sock, key, true)?;
     c.send(&plan)?;
-    let (up, tp, token, resize, reconcile) = match c.recv::<Admission>()? {
+    let (up, tp, token, resize, reconcile, drain_max_ms) = match c.recv::<Admission>()? {
         Admission::Ready {
             udp,
             tcp,
             token,
             resize,
             reconcile,
-        } => (udp, tcp, token, resize, reconcile),
+            drain_max_ms,
+        } => (udp, tcp, token, resize, reconcile, drain_max_ms),
         r => bail!("admission rejected: {}", serde_json::to_string(&r)?),
     };
+    ensure!(drain_max_ms <= 30000, "invalid peer drain limit");
     let (mut tcp, udp) = (|| -> Result<_> {
         let mut tcp = Vec::new();
         if plan.mode != Mode::Udp {
@@ -759,13 +892,15 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
     c.0.set_read_timeout(Some(Duration::from_secs(15)))?;
     println!(
         "{}",
-        json!({"status":"ready","version":1,"resize":resize,"tcp_port":tp,"udp_port":up})
+        json!({"status":"ready","version":1,"resize":resize,"drain_max_ms":drain_max_ms,"tcp_port":tp,"udp_port":up})
     );
     let mut expected_peer_base = 0;
     let mut prev = 0;
     let origin = Instant::now();
     let mut base = 0;
     let mut previous_udp = None;
+    let mut remote_sent = vec![0u64; tcp.len()];
+    let mut control_rtt_ms = None;
     for line in io::stdin().lock().lines() {
         let line = line?;
         if line.trim() == "\"ready\"" {
@@ -784,12 +919,28 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
             println!("{}", json!({"resize":result}));
             continue;
         }
+        if let Ok(finish) = serde_json::from_str::<FinishInput>(&line) {
+            ensure!(
+                plan.mode != Mode::Udp && (1..=drain_max_ms).contains(&finish.finish_ms),
+                "unsupported final TCP budget"
+            );
+            return finish_client(
+                &mut c,
+                &mut tcp,
+                &remote_sent,
+                prev,
+                finish.finish_ms,
+                control_rtt_ms,
+            );
+        }
         let request: Option<Window> = serde_json::from_str(&line)?;
         let Some(w) = request else { break };
         validate(w, &plan, prev)?;
         prev = w.id;
+        let sent_at = Instant::now();
         c.send(&Request::Window(w, base))?;
         let peer_base = c.recv::<u64>()?;
+        control_rtt_ms = Some(sent_at.elapsed().as_micros().div_ceil(1000).max(1) as u64);
         ensure!(
             peer_base == expected_peer_base,
             "unexpected sender sequence boundary"
@@ -823,6 +974,9 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
         base += local.udp.sent;
         let mut remote: Endpoint = c.recv()?;
         remote.validate_feedback(&local, w, plan.mode, plan.udp_size, peer_base)?;
+        for (total, lane) in remote_sent.iter_mut().zip(&remote.tcp) {
+            *total = total.checked_add(lane.sent).context("TCP count overflow")?;
+        }
         if reconcile
             && plan.mode != Mode::Tcp
             && (remote.udp.received.highest < local.udp.sent
@@ -853,7 +1007,10 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
         expected_peer_base = peer_base
             .checked_add(remote.udp.sent)
             .context("UDP sequence exhausted")?;
-        println!("{}", json!({"window":w,"client":local,"server":remote}));
+        println!(
+            "{}",
+            json!({"window":w,"client":local,"server":remote,"control_rtt_ms":control_rtt_ms})
+        );
     }
     c.send(&Request::Stop)?;
     ensure!(c.recv::<String>()? == "stopped", "stop unconfirmed");
@@ -890,6 +1047,7 @@ fn main() -> Result<()> {
             listen,
             data_ports,
             allow_overload_ms,
+            drain_max_ms,
             capacity,
             tx,
             rx,
@@ -898,7 +1056,14 @@ fn main() -> Result<()> {
                 forward: capacity.or(tx).context("set explicit capacity")?,
                 reverse: capacity.or(rx).context("set explicit capacity")?,
             };
-            server(listen, cap, data_ports.0, allow_overload_ms, key(&args)?)
+            server(
+                listen,
+                cap,
+                data_ports.0,
+                allow_overload_ms,
+                drain_max_ms,
+                key(&args)?,
+            )
         }
         Command::Client {
             connect,
@@ -989,6 +1154,7 @@ mod tests {
                     rates,
                     None,
                     0,
+                    5000,
                     Slot(shared, peer.ip(), Rates::default(), None),
                 )
             });

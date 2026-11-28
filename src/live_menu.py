@@ -77,9 +77,11 @@ def setup(args, parser):
 
 
 class LiveMenu:
-    def __init__(self, settings, mode):
+    def __init__(self, settings, mode, drain=None):
         self.reservations = {d: cfg["ceiling_bps"] for d, cfg in settings.items()}
         self.mode = mode
+        self.drain = drain if mode != "udp" else None
+        self.drain_cap = None
 
     def poll(self, active, settings, end, record, resize, resume, validate):
         if not select.select([sys.stdin], [], [], 0)[0]:
@@ -94,6 +96,8 @@ class LiveMenu:
             resume.set()
             return end
         if parts == ["status"]:
+            if self.drain is not None and self.drain_cap is not None:
+                print(f"Negotiated final TCP receipt limit: {self.drain_cap} ms", file=sys.stderr)
             if not active:
                 print("Waiting for a session. No fresh receiver measurement.", file=sys.stderr)
             for d, live in active.items():
@@ -110,6 +114,8 @@ class LiveMenu:
                     raise ValueError("choose a new plan file")
                 output = {d: {k: v for k, v in cfg.items() if k not in ("udp_size", "delay_policy")}
                           for d, cfg in settings.items()}
+                if self.drain is not None:
+                    output["drain"] = self.drain
                 try:
                     with Path(path).open("x") as handle:
                         json.dump(output, handle, indent=2)

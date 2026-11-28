@@ -109,6 +109,122 @@ class Native:
         return False
 
 
+DRAIN_DEFAULTS = {"min_ms": 250, "max_ms": 5000, "rtt_multiplier": 3, "jitter_ms": 100}
+
+
+def drain_settings(args, supplied):
+    if not isinstance(supplied, dict) or set(supplied) - set(DRAIN_DEFAULTS):
+        raise ValueError("drain must be an object with known settings")
+    result = dict(DRAIN_DEFAULTS, **supplied)
+    for key in result:
+        override = getattr(args, "drain_" + key, None)
+        if override is not None:
+            result[key] = override
+    if any(type(value) is not int for value in result.values()):
+        raise ValueError("drain settings must be integers")
+    if not 1 <= result["min_ms"] <= result["max_ms"] <= 30000:
+        raise ValueError("drain bounds require 1 <= min_ms <= max_ms <= 30000")
+    if not 1 <= result["rtt_multiplier"] <= 100 or not 0 <= result["jitter_ms"] <= 30000:
+        raise ValueError("drain multiplier must be 1..100 and jitter margin 0..30000 ms")
+    return result
+
+
+class TcpClose:
+    """One bounded final receipt per admitted TCP session, in both directions."""
+
+    def __init__(self, settings, gateway_cap, prepared_flows):
+        if type(gateway_cap) is not int or not 0 <= gateway_cap <= 30000:
+            raise ValueError("invalid gateway drain maximum")
+        self.settings = settings
+        self.cap = min(gateway_cap, settings["max_ms"])
+        self.control_rtt_ms = None
+        self.sample_at = None
+        self.sent = {d: [0] * prepared_flows for d in DIRECTIONS}
+        self.last_window = 0
+
+    def observe(self, result, requested_at):
+        # The acknowledgement precedes the measurement interval. Use the
+        # request start, not the later receipt time, for conservative freshness.
+        rtt = result.get("control_rtt_ms")
+        if type(rtt) is int and rtt >= 1:
+            self.control_rtt_ms = rtt
+            self.sample_at = requested_at
+        for direction, endpoint in (("forward", "server"), ("return", "client")):
+            for i, flow in enumerate(result[endpoint]["tcp"]):
+                self.sent[direction][i] += flow["sent"]
+        self.last_window = result["window"]["id"]
+
+    def allowance(self, now):
+        age = None if self.sample_at is None else max(0, int((now - self.sample_at) * 1000))
+        # Native windows last at most ten seconds. Discard old measurements
+        # after fifteen seconds, including across a suspended session.
+        if age is None or age > 15000:
+            return self.cap, age
+        calculated = self.settings["rtt_multiplier"] * self.control_rtt_ms + self.settings["jitter_ms"]
+        return min(self.cap, max(self.settings["min_ms"], calculated)), age
+
+    def receipt(self, now):
+        budget, age = self.allowance(now)
+        return dict(status="unknown", stop_acknowledged=False, directions={},
+                    control_rtt_ms=self.control_rtt_ms, sample_age_ms=age,
+                    budget_ms=budget, effective_max_ms=self.cap, wait_ms=0)
+
+    def check_reply(self, answer):
+        acknowledged = answer.get("status") == "stopped"
+        if not acknowledged and answer.get("status") != "unconfirmed":
+            raise ValueError("unexpected final TCP response")
+        directions = answer.get("tcp_final")
+        if not isinstance(directions, dict) or set(directions) != set(DIRECTIONS):
+            raise ValueError("missing final TCP direction")
+        matched = True
+        for direction, expected in self.sent.items():
+            rows = directions[direction]
+            if not isinstance(rows, list) or len(rows) != len(expected):
+                raise ValueError("wrong final TCP flow count")
+            for flow, written in zip(rows, expected):
+                if not isinstance(flow, dict) or set(flow) != {
+                    "sent_records", "received_records", "last_window", "last_sequence"
+                }:
+                    raise ValueError("invalid final TCP flow")
+                sent, received, window, sequence = (flow[k] for k in (
+                    "sent_records", "received_records", "last_window", "last_sequence"))
+                if type(sent) is not int or sent != written:
+                    raise ValueError("final TCP sender count disagrees with window receipts")
+                if not acknowledged and received is None and window is None and sequence is None:
+                    matched = False
+                    continue
+                if (any(type(x) is not int for x in (received, window, sequence))
+                        or not 0 <= received <= sent or not 0 <= window <= self.last_window
+                        or not 0 <= sequence <= received or bool(received) != bool(window)
+                        or bool(received) != bool(sequence)):
+                    raise ValueError("invalid final TCP receiver counts")
+                matched &= received == sent
+        status = ("complete" if matched else "incomplete") if acknowledged else "unknown"
+        return directions, acknowledged, status
+
+    def finish(self, proc, hard_deadline):
+        started = time.monotonic()
+        receipt = self.receipt(started)
+        deadline = min(started + receipt["budget_ms"] / 1000, hard_deadline)
+        remaining = max(0, round((deadline - started) * 1000))
+        receipt["remaining_budget_ms"] = remaining
+        try:
+            if remaining < 1:
+                raise Deadline
+            # Allow native stdout delivery before the same absolute client deadline.
+            proc.write({"finish_ms": max(1, remaining - min(30, remaining // 10))})
+            directions, ack, status = self.check_reply(proc.read(deadline))
+            reason = {"complete": "all_records_confirmed", "incomplete": "outstanding_records",
+                      "unknown": "gateway_receipt_unconfirmed"}[status]
+            receipt.update(directions=directions, stop_acknowledged=ack, status=status, reason=reason)
+        except (Deadline, ConnectionError, OSError, ValueError) as error:
+            receipt["reason"] = ("receipt_timeout" if isinstance(error, Deadline)
+                                 else "invalid_receipt" if isinstance(error, ValueError)
+                                 else "control_closed")
+        receipt["wait_ms"] = round(1000 * (time.monotonic() - started))
+        return receipt
+
+
 def send_time_available_ms(remaining_s, observed_overhead_ms):
     """Leave time for a measured receiver report before the original run deadline."""
     if remaining_s == float("inf"):
@@ -424,6 +540,8 @@ class LiveDirection:
 def plan(args, overrides=None):
     if overrides is None:
         overrides = json.loads(args.plan.read_text()) if args.plan else {}
+        if isinstance(overrides, dict):
+            drain_settings(args, overrides.pop("drain", {}))
     if not isinstance(overrides, dict) or set(overrides) - set(DIRECTIONS):
         raise ValueError("plan must contain forward and/or return objects")
     settings = {}
@@ -520,16 +638,18 @@ def plan(args, overrides=None):
 
 
 def run(args):
+    supplied = json.loads(args.plan.read_text()) if args.plan else {}
+    if not isinstance(supplied, dict):
+        raise ValueError("plan must be an object")
+    drain = drain_settings(args, supplied.pop("drain", {}))
     if args.window_ms is None:
         args.window_ms = 5000
-        if args.plan:
-            supplied = json.loads(args.plan.read_text())
-            if isinstance(supplied, dict) and supplied and all(
-                isinstance(v, dict) and type(v.get("window_ms")) is int for v in supplied.values()
-            ):
-                windows = {v["window_ms"] for v in supplied.values()}
-                if len(windows) == 1:
-                    args.window_ms = windows.pop()
+        if supplied and all(
+            isinstance(v, dict) and type(v.get("window_ms")) is int for v in supplied.values()
+        ):
+            windows = {v["window_ms"] for v in supplied.values()}
+            if len(windows) == 1:
+                args.window_ms = windows.pop()
     if not 250 <= args.window_ms <= 10000 or (
         args.duration is not None and not 0 < args.duration <= 1e9
     ):
@@ -543,8 +663,8 @@ def run(args):
         raise ValueError("flow counts must be in 1..16")
     if args.tcp_send_buffer is not None and not 8192 <= args.tcp_send_buffer <= 4194304:
         raise ValueError("TCP send buffer must be 8192..4194304 bytes")
-    settings = plan(args)
-    menu = LiveMenu(settings, args.mode) if getattr(args, "interactive", False) else None
+    settings = plan(args, supplied)
+    menu = LiveMenu(settings, args.mode, drain) if getattr(args, "interactive", False) else None
     binary = engine_path()
     config = ["--config", str(args.config)] if args.config else []
     if args.tcp_send_buffer is not None:
@@ -585,6 +705,7 @@ def run(args):
             mode=args.mode,
             settings=copy.deepcopy(settings),
             stop_acknowledged=False,
+            drain_settings=drain if args.mode != "udp" else None,
             connect=args.connect,
             duration_s=args.duration,
             overload_ms=args.overload_ms,
@@ -608,6 +729,44 @@ def run(args):
     status, reason = "failed", "setup_failed"
     number = 0
     proc = None
+    closing = None
+    hard_close_by = float("inf")
+
+    def persist_final(receipt):
+        nonlocal closing
+        receipt["session"] = rec.manifest["sessions"]
+        rec.append("tcp-final.jsonl", json.dumps(receipt, separators=(",", ":")) + "\n")
+        closing = None
+        print(f"Final TCP receipt for session {receipt['session']}: {receipt['status']} "
+              f"({receipt['reason']}, waited {receipt['wait_ms']} ms).", file=sys.stderr)
+        if receipt["status"] != "complete":
+            rec.event("coverage_gap", elapsed(), detail="tcp_final_" + receipt["reason"])
+
+    def finish_session():
+        nonlocal proc
+        if closing is not None and closing.cap:
+            receipt = closing.finish(proc, hard_close_by)
+            # Native releases its sockets before confirming shutdown.
+            proc.close()
+            persist_final(receipt)
+            acknowledged = receipt["stop_acknowledged"]
+        else:
+            acknowledged = proc.close(orderly=True)
+            if closing is not None:
+                receipt = closing.receipt(time.monotonic())
+                receipt.update(status="unsupported", stop_acknowledged=acknowledged,
+                               reason="legacy_gateway")
+                persist_final(receipt)
+        proc = None
+        rec.manifest["stop_acknowledged"] = acknowledged
+        return acknowledged
+
+    def abandon_session(reason):
+        if closing is not None:
+            receipt = closing.receipt(time.monotonic())
+            receipt["reason"] = reason
+            persist_final(receipt)
+
     overload_pending = bool(args.overload_ms)
     last_probe = None
     monitor = None
@@ -639,6 +798,13 @@ def run(args):
                     raise ConnectionError("receiver unavailable")
                 rec.manifest["stop_acknowledged"] = False
                 rec.manifest["sessions"] += 1
+                if args.mode != "udp":
+                    closing = TcpClose(drain, ready.get("drain_max_ms", 0), prepared_flows)
+                    hard_close_by = float("inf")
+                    if menu:
+                        menu.drain_cap = closing.cap
+                        print(f"Final TCP receipt limit {closing.cap} ms." if closing.cap else
+                              "Gateway does not support final TCP receipts.", file=sys.stderr)
                 rec.save()
                 rec.event("session_ready", elapsed(), detail=rec.manifest["sessions"])
                 session_window = 0
@@ -801,6 +967,10 @@ def run(args):
                     begin = elapsed()
                     proc.write(window)
                     due = time.monotonic()
+                    # A late last window and its final receipt share the post-deadline
+                    # allowance. Receiving the window cannot restart the timer.
+                    grace_ms = closing.allowance(due)[0] if closing and closing.cap else 3000
+                    hard_close_by = end + grace_ms / 1000
                     # Each direction owns its feedback timer. A stalled shared control connection
                     # can hold both, then causes a fresh authenticated replacement.
                     suspended = set()
@@ -812,7 +982,7 @@ def run(args):
                     )
                     for timeout, n, timer in timers:
                         try:
-                            result = proc.read(min(end + 3, due + timeout / 1000))
+                            result = proc.read(min(hard_close_by, due + timeout / 1000))
                             break
                         except Deadline:
                             if time.monotonic() >= end:
@@ -833,7 +1003,7 @@ def run(args):
                     else:
                         # The bounded window has ended. Give the active peer a
                         # chance to finish its authenticated report before replacing it.
-                        result = proc.read(min(end + 3, time.monotonic() + 5))
+                        result = proc.read(min(hard_close_by, time.monotonic() + 5))
                     if result.get("window") != window:
                         raise ValueError("native window mismatch")
                     session_window = number
@@ -850,6 +1020,11 @@ def run(args):
                             **result,
                         )
                     )
+                    if closing is not None:
+                        closing.observe(result, due)
+                        now = time.monotonic()
+                        if closing.cap and now < end:
+                            hard_close_by = end + closing.allowance(now)[0] / 1000
                     if suspended:
                         proc.ready(session_window, end)
                     link = monitor.state(stop) if monitor else "unknown"
@@ -947,12 +1122,11 @@ def run(args):
                     if pending_rows:
                         measured_windows += 1
                     backoff = 0.5
-                if not proc.close(orderly=True):
-                    raise ConnectionError("stop unconfirmed")
-                rec.manifest["stop_acknowledged"] = True
-                proc = None
+                if not finish_session():
+                    rec.event("coverage_gap", elapsed(), detail="stop_unconfirmed")
                 break
             except (ConnectionError, BrokenPipeError, Deadline) as exc:
+                abandon_session("control_or_feedback_interrupted")
                 rec.event("coverage_gap", elapsed(), detail=type(exc).__name__)
                 if proc:
                     proc.close()
@@ -985,8 +1159,7 @@ def run(args):
     except OperatorStop:
         status, reason = "interrupted", "operator_stop"
         if proc:
-            rec.manifest["stop_acknowledged"] = proc.close(orderly=True)
-            proc = None
+            finish_session()
         rec.event("operator_stop", elapsed())
         return 130
     except KeyboardInterrupt:
@@ -1003,6 +1176,10 @@ def run(args):
     finally:
         if proc:
             proc.close()
+        if closing is not None:
+            # Keep terminalization possible when the disk reserve is needed.
+            rec.reserve.unlink(missing_ok=True)
+            abandon_session(reason if reason in ("operator_stop", "storage_full") else "session_interrupted")
         if monitor and monitor.thread.ident is not None:
             monitor.close()
         signal.signal(signal.SIGUSR1, previous_signal)
@@ -1081,6 +1258,10 @@ def main():
         type=int,
         help="optional per-flow sender socket buffer in bytes",
     )
+    p.add_argument("--drain-min-ms", type=int, help="minimum TCP final-receipt allowance in ms (default 250)")
+    p.add_argument("--drain-max-ms", type=int, help="maximum TCP final-receipt allowance in ms (default 5000, gateway can lower it)")
+    p.add_argument("--drain-rtt-multiplier", type=int, help="end-to-end control RTT multiplier for final receipts (default 3)")
+    p.add_argument("--drain-jitter-ms", type=int, help="extra TCP final-receipt timing margin in ms (default 100)")
     p.add_argument("--flow-limit", type=int, default=4)
     p.add_argument("--flows", type=int, help="fixed active TCP flows")
     p.add_argument(

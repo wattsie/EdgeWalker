@@ -37,5 +37,7 @@ printf 'Local results: %s\n' "$work"
 rc=0
 "$cli" run --mode tcp --connect "$gateway" --duration 60 --window-ms 5000 --flows 1 --flow-limit 1 "$@" --output "$work/run" || rc=$?
 printf '%s\n' "$rc" > "$work/client-exit.txt"
-"$python" "$here/review.py" "$work/run" --profile "$profile" --exit-code "$rc" || exit 1
-exit "$rc"
+review_rc=0
+"$python" "$here/review.py" "$work/run" --profile "$profile" --exit-code "$rc" || review_rc=$?
+[ "$rc" -eq 0 ] || exit "$rc"
+exit "$review_rc"
