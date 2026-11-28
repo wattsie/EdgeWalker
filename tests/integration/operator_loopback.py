@@ -89,10 +89,10 @@ class OperatorLoopback(unittest.TestCase):
         self.wait_rows("menu")
         for edit, expected in (
             ("reserve forward 1100000", "operator_reservation_rejected"),
-            ("reserve forward 350000", "operator_reservation_confirmed,350000"),
-            ("limit forward 300000", "operator_limit,300000"),
+            ("reserve forward 0.35M", "operator_reservation_confirmed,350000"),
+            ("limit forward 300k", "operator_limit,300000"),
             ("flows forward 2", "operator_flows,2"),
-            ("rate forward 250000", "operator_rate,250000"),
+            ("rate forward 0.25m", "operator_rate,250000"),
             ("reserve forward 180000", "operator_limit,180000"),
             ("set forward probe_ms 9000", "operator_set_probe_ms,9000"),
             ("remaining 2", "operator_remaining_seconds,2"),
@@ -166,7 +166,7 @@ class OperatorLoopback(unittest.TestCase):
             ("reserve forward 320000", "operator_reservation_confirmed,320000"),
             ("limit forward 320000", "operator_limit,320000"),
             ("flows forward 2", "operator_flows,2"),
-            ("set forward start_bps 280000", "operator_set_start_bps,280000"),
+            ("set forward start_bps 280K", "operator_set_start_bps,280000"),
         ):
             command(edit)
             wait_for("events.csv", marker)

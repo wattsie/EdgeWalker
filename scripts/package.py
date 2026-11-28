@@ -126,6 +126,7 @@ def main():
                         "live_menu.py",
                         "calibrate.py",
                         "replay.py",
+                        "rates.py",
                         "records.py",
                         "telemetry.py",
                         "html_report.py",

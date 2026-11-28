@@ -1,6 +1,13 @@
 # Running EdgeWalker
 
-Use `./edgewalker --version` (or `-V`) to print the launcher release version. This works in a source checkout before compiling the engine. Use `./edgewalker help` for the command list and `./edgewalker help COMMAND` for command-specific options, including `help menu` for interactive client setup. The published RC3 launcher predates these shortcuts; use `./bin/edgewalker-native --version` and `./edgewalker COMMAND --help` with that package.
+Use `./edgewalker --version` (or `-V`) to print the launcher release version. This works in a source checkout before compiling the engine. Use `./edgewalker help` for the command list and `./edgewalker help COMMAND` for command-specific options, including `help menu` for interactive client setup.
+
+### Entering rates
+
+Use plain integer bits per second or a decimal number with a case-insensitive SI suffix: `1k` = 1,000 bps, `1.5M` = 1,500,000 bps, and `1G` = 1,000,000,000 bps. This applies to client starts and ceilings, calibration, gateway capacity and directional pools, and every rate edit in the menu. For example, enter `rate forward 1.5M`, `reserve forward 60M`, or `set return probe_step_bps 25k`. Ordinary field limits and the session's admitted capacity still apply.
+
+In a plan or synthetic replay JSON, quote shorthand values, for example `"start_bps": "1.5M"`. Saved plans, session records, and report data use integer bps. Use a single token with a whole-bit result. Byte units (`MB`), binary prefixes (`Mi`), scientific notation and fractions below one bit/s are rejected. Flow counts, ports, timeouts and packet sizes retain their existing units.
+
 
 
 Follow the [installation and first calibration instructions](../README.md#install) on each endpoint. Use a local package or build the native engine with `cargo build --release --locked` from the repository root. The supported setup uses Python 3.11 or later and its standard library. The package includes the native engine for the platform in its filename. Run `./edgewalker run --help` for client options and `./edgewalker server --help` for server options.
@@ -176,7 +183,7 @@ A report reads an existing run directory and prints JSON, including recorded cov
 
 ## Command reference
 
-`./edgewalker --help` lists the six launcher commands. Every launcher command accepts `-h` and `--help`. Place a command's options after its name. Integer rates below are **application bits per second** in decimal units, so 400 kbps is `400000`. Every run needs at least one positive directional maximum.
+`./edgewalker --help` lists the launcher commands. Every launcher command accepts `-h` and `--help`. Place a command's options after its name. Rates are **application bits per second**. Enter `400000` or `400k` for 400 kbps. Every run needs at least one positive directional maximum.
 
 | Command | Inputs and output |
 |---|---|
@@ -280,7 +287,7 @@ Use a new output directory for each calibration. Each phase saves its plan, sess
 
 A directional plan may set `feedback_ms` (250–10000 ms) independently of the clean observation gate `window_ms`. Native reports describe both active directions in a single exchange. A bidirectional run uses the shorter requested cadence and records the actual send interval. Low-rate sample collection, probe settling and the deadline can change individual intervals. Calibration considers the observed round-trip reporting cost and caps the proposal to the native packet budget.
 
-For Python integration, put the checkout or extracted package's `src` directory on the module search path and call `calibrate.calibrate_link(connect=..., output=..., duration=..., forward_max=..., return_max=..., config=...)`. Rates are integer bits per second. The function returns the exit code, plan and per-setting evidence. `calibration.json` records the budget, elapsed time, guardrails and comparison thresholds. The quarter-cap start and chosen window are launch settings. Only settings labelled `verified_bundle` passed the empirical tuning gates.
+For Python integration, put the checkout or extracted package's `src` directory on the module search path and call `calibrate.calibrate_link(connect=..., output=..., duration=..., forward_max=..., return_max=..., config=...)`. The API accepts integer bits per second or the same rate strings as the CLI. The function returns the exit code, plan and per-setting evidence. `calibration.json` records the budget, elapsed time, guardrails and comparison thresholds. The quarter-cap start and chosen window are launch settings. Only settings labelled `verified_bundle` passed the empirical tuning gates.
 
 With just endpoints, maxima and duration, the calibrator selects a common measurement window of up to five seconds within the native packet budget. A 1 Gbps maximum selects 800 ms. Override it only when a particular observation interval is needed for comparison.
 

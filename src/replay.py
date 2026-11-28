@@ -1,5 +1,6 @@
 """Deterministic replay of a, single-stream UDP controller per direction."""
 
+from rates import normalize_rates
 import argparse
 import json
 from pathlib import Path
@@ -355,7 +356,12 @@ def replay(trace):
         raise ValueError("expected forward and/or return configuration")
     if any(not isinstance(cfg, dict) for cfg in configs.values()):
         raise ValueError("direction settings must be objects")
-    controllers = {name: Direction(configs[name]) for name in sorted(configs)}
+    controllers = {}
+    for name in sorted(configs):
+        cfg = normalize_rates(configs[name])
+        if isinstance(cfg.get("delay_policy"), dict):
+            cfg["delay_policy"] = normalize_rates(cfg["delay_policy"])
+        controllers[name] = Direction(cfg)
     rows = []
 
     def emit(name, now, reason, evidence=None):
@@ -388,7 +394,7 @@ def replay(trace):
         c = controllers[name]
         evidence = {}
         if kind == "feedback":
-            reason = c.feedback(event, now, evidence)
+            reason = c.feedback(normalize_rates(event), now, evidence)
         elif kind == "ready":
             reason = "ignored_ready"
             if (c.state == "suspended" and event["session"] == session

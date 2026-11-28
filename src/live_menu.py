@@ -1,4 +1,6 @@
 """Line-oriented controls for a local terminal or SSH session."""
+from rates import display_rate, rate_bps
+from argparse import ArgumentTypeError
 import getpass
 import json
 from pathlib import Path
@@ -7,7 +9,7 @@ import sys
 import time
 
 HELP = ("Commands (finish with Enter): rate D BPS | limit D BPS | flows D N/auto | "
-        "reserve D BPS | set D SETTING VALUE | remaining SECONDS/open | resume | status | save NEW_PATH | stop | help. D is forward (download) or return (upload).")
+        "reserve D BPS | set D SETTING VALUE | remaining SECONDS/open | resume | status | save NEW_PATH | stop | help. D is forward (download) or return (upload). Rates accept bps or decimal k/M/G.")
 
 
 class OperatorStop(Exception):
@@ -25,8 +27,8 @@ def setup(args, parser):
     if args.mode not in ("tcp", "udp", "combined") or not args.connect:
         raise ValueError("a gateway address and valid mode are required")
     if not args.plan and args.forward_max is None and args.return_max is None:
-        args.forward_max = int(input("Download reservation (bps, 0 disables): "))
-        args.return_max = int(input("Upload reservation (bps, 0 disables): "))
+        args.forward_max = rate_bps(input("Download reservation (bps or k/M/G, 0 disables): "))
+        args.return_max = rate_bps(input("Upload reservation (bps or k/M/G, 0 disables): "))
     if not args.output:
         name = input("New results directory: ").strip()
         if not name:
@@ -40,7 +42,7 @@ def setup(args, parser):
         for direction in ("forward", "return"):
             limit = getattr(args, direction + "_max")
             if limit is not None:
-                print(f"{direction}: requested reservation {limit} bps", file=sys.stderr)
+                print(f"{direction}: requested reservation {display_rate(limit)}", file=sys.stderr)
         answer = input("Start test? [y/N], edit or help: ").strip().lower()
         if answer in ("y", "yes"):
             break
@@ -68,7 +70,7 @@ def setup(args, parser):
             if action.choices and value not in action.choices:
                 raise ValueError("choose one of " + ", ".join(action.choices))
             setattr(args, action.dest, value)
-        except ValueError as error:
+        except (ValueError, ArgumentTypeError) as error:
             print(f"Edit rejected: {error}", file=sys.stderr)
     print(HELP, file=sys.stderr)
     return True
@@ -95,8 +97,8 @@ class LiveMenu:
             if not active:
                 print("Waiting for a session. No fresh receiver measurement.", file=sys.stderr)
             for d, live in active.items():
-                print(f"{d}: reserved {self.reservations[d]}, ceiling {settings[d]['ceiling_bps']}, "
-                      f"next offer {live.c.rate} bps, flows {live.flows}, state {live.c.state}", file=sys.stderr)
+                print(f"{d}: reserved {display_rate(self.reservations[d])}, ceiling {display_rate(settings[d]['ceiling_bps'])}, "
+                      f"next offer {display_rate(live.c.rate)}, flows {live.flows}, state {live.c.state}", file=sys.stderr)
             return end
         if parts == ["help"]:
             print(HELP, file=sys.stderr)
@@ -137,6 +139,8 @@ class LiveMenu:
                     if raw not in ("true", "false"):
                         raise ValueError("use true or false")
                     value = raw == "true"
+                elif field.endswith("_bps"):
+                    value = rate_bps(raw)
                 else:
                     value = raw if field == "minimum_action" else int(raw)
                 if field == "target_bps" and value < 1:
@@ -162,7 +166,7 @@ class LiveMenu:
                 record("operator_flows", direction, "auto")
                 print("Automatic flow scaling enabled.", file=sys.stderr)
                 return end
-            value = int(raw)
+            value = rate_bps(raw) if command in ("rate", "reserve", "limit") else int(raw)
             cfg = settings[direction]
             if live.suspended:
                 raise ValueError("direction is suspended")
@@ -183,7 +187,7 @@ class LiveMenu:
                 resize(requested)
                 self.reservations = requested
                 record("operator_reservation_confirmed", direction, value)
-                print(f"Gateway confirmed {value} bps.", file=sys.stderr, flush=True)
+                print(f"Gateway confirmed {display_rate(value)}.", file=sys.stderr, flush=True)
                 if value >= cfg["ceiling_bps"]:
                     return end
                 command = "limit"

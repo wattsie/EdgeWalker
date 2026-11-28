@@ -45,11 +45,11 @@ enum Command {
         data_ports: PortSelection,
         #[arg(long, default_value_t = 0)]
         allow_overload_ms: u64,
-        #[arg(long, conflicts_with_all=["tx","rx"])]
+        #[arg(value_parser = parse_rate, long, conflicts_with_all=["tx","rx"])]
         capacity: Option<u64>,
-        #[arg(long, requires = "rx")]
+        #[arg(value_parser = parse_rate, long, requires = "rx")]
         tx: Option<u64>,
-        #[arg(long, requires = "tx")]
+        #[arg(value_parser = parse_rate, long, requires = "tx")]
         rx: Option<u64>,
     },
     Client {
@@ -57,7 +57,7 @@ enum Command {
         connect: SocketAddr,
         #[arg(long, value_enum)]
         mode: Mode,
-        #[arg(long, default_value_t = 0)]
+        #[arg(value_parser = parse_rate, long, default_value_t = 0)]
         forward_max: u64,
         #[arg(long, default_value_t = 1)]
         flow_limit: u64,
@@ -69,7 +69,7 @@ enum Command {
         udp_size: usize,
         #[arg(long, default_value_t = 0)]
         overload_ms: u64,
-        #[arg(long, default_value_t = 0)]
+        #[arg(value_parser = parse_rate, long, default_value_t = 0)]
         return_max: u64,
     },
 }
@@ -267,6 +267,50 @@ fn validate(w: Window, plan: &Session, prev: u32) -> Result<()> {
     }
     Ok(())
 }
+/// Parse decimal SI prefixes exactly, including values beyond f64 precision.
+fn parse_rate(text: &str) -> Result<u64> {
+    let text = text.trim();
+    let places = match text.as_bytes().last().map(u8::to_ascii_lowercase) {
+        Some(b'k') => 3,
+        Some(b'm') => 6,
+        Some(b'g') => 9,
+        _ => 0,
+    };
+    let number = if places == 0 {
+        text
+    } else {
+        &text[..text.len() - 1]
+    };
+    let (whole, fraction) = match number.split_once('.') {
+        Some((_, "")) => bail!("missing fractional digits"),
+        Some(parts) => parts,
+        None => (number, ""),
+    };
+    ensure!(
+        !whole.is_empty()
+            && whole
+                .bytes()
+                .chain(fraction.bytes())
+                .all(|b| b.is_ascii_digit()),
+        "use whole bits/s or decimal k/M/G, e.g. 1k, 1.5M or 1G"
+    );
+    let fraction = fraction.trim_end_matches('0');
+    ensure!(
+        fraction.len() <= places,
+        "rate must resolve to a whole bit per second"
+    );
+    let digits = whole
+        .bytes()
+        .chain(fraction.bytes())
+        .chain(std::iter::repeat_n(b'0', places - fraction.len()));
+    digits
+        .into_iter()
+        .try_fold(0u64, |n, b| {
+            n.checked_mul(10)?.checked_add(u64::from(b - b'0'))
+        })
+        .context("rate exceeds the unsigned 64-bit limit")
+}
+
 #[derive(Clone, Copy)]
 struct PortSelection(Option<(u16, u16)>);
 
@@ -775,6 +819,32 @@ mod high_latency_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rate_units_are_exact_and_bounded() {
+        for (text, expected) in [
+            ("0", 0),
+            ("1000000", 1000000),
+            ("1k", 1000),
+            ("1.5m", 1500000),
+            ("1G", 1000000000),
+            ("0.000000001g", 1),
+            ("18446744073.709551615G", u64::MAX),
+        ] {
+            assert_eq!(parse_rate(text).unwrap(), expected);
+        }
+        for text in [
+            "1MB",
+            "0.0001k",
+            "1e6",
+            "NaN",
+            "-1",
+            "1.2.3M",
+            "18446744073.709551616G",
+        ] {
+            assert!(parse_rate(text).is_err());
+        }
+    }
+
     #[test]
     fn resize_preserves_other_sessions_and_rolls_back_both_pools_on_rejection() {
         let ip = IpAddr::from([127, 0, 0, 1]);

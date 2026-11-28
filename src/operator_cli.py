@@ -20,6 +20,7 @@ from statistics import median_high
 
 from live_menu import LiveMenu, OperatorStop, setup
 from html_report import write_html
+from rates import display_rate, normalize_rates, rate_argument
 from records import Records, report, timestamp
 from replay import Direction, integer, replay
 from telemetry import InterfaceMonitor
@@ -422,6 +423,7 @@ def plan(args, overrides=None):
         extra = overrides.get(name, {})
         if not isinstance(extra, dict):
             raise ValueError("direction settings must be an object")
+        extra = normalize_rates(extra)
         maximum = getattr(args, name + "_max")
         if maximum is None:
             maximum = extra.get("ceiling_bps", 0)
@@ -931,7 +933,7 @@ def run(args):
                     for n, row in pending_rows.items():
                         rec.series(n, row)
                         if menu:
-                            print(f"{n}: offered {row['offer_bps']} bps, delivered {row['delivered_bps']} bps, "
+                            print(f"{n}: offered {display_rate(row['offer_bps'])}, delivered {display_rate(row['delivered_bps'])}, "
                                   f"TCP flows {row['tcp_flows']}", file=sys.stderr)
                         rec.event(row["reason"], stop, n, row["next_bps"])
                     if pending_rows:
@@ -1079,8 +1081,8 @@ def main():
         help="require SIGUSR1 before resuming after suspension or connection loss",
     )
     for n in DIRECTIONS:
-        p.add_argument("--" + n + "-max", type=int)
-        p.add_argument("--" + n + "-start", type=int)
+        p.add_argument("--" + n + "-max", type=rate_argument, metavar="RATE")
+        p.add_argument("--" + n + "-start", type=rate_argument, metavar="RATE")
     help_command = sub.add_parser("help", help="show usage for a command")
     help_command.add_argument("topic", nargs="?", choices=[*sub.choices, "menu"])
     if not argv:

@@ -9,8 +9,8 @@ Run these commands on the server. Expect `x86_64` and `glibc 2.17` or newer. Fro
 ```sh
 uname -m
 getconf GNU_LIBC_VERSION
-archive=edgewalker-0.2.2-rc.3-linux-x86_64-glibc2.17.tar.gz
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.3
+archive=edgewalker-0.2.2-rc.4-linux-x86_64-glibc2.17.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.4
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256" &&
@@ -18,7 +18,7 @@ curl -fLO "$release/$archive" &&
   ./bin/edgewalker-native --version
 ```
 
-The embedded engine version is 0.2.2-rc.3. Keep this directory available for the service files and field guide.
+The embedded engine version is 0.2.2-rc.4. Keep this directory available for the service files and field guide.
 
 ## Install the gateway
 
@@ -50,7 +50,7 @@ sudo sh -ec 'if [ ! -e /etc/edgewalker/config.json ]; then
 fi'
 ```
 
-Edit the listen address, capacity and data ports before starting. The example binds only to loopback and admits 1 Mbps per direction. Use the server's assigned test-interface IP for remote clients. Allow the selected TCP control port and TCP/UDP data port range from the authorized peer. Stop any foreground EdgeWalker server using those ports.
+Edit the listen address, capacity and data ports before starting. `EDGEWALKER_CAPACITY=1M` and `EDGEWALKER_CAPACITY=1000000` both reserve up to 1 Mbps per direction for all clients together. The example binds only to loopback and admits 1 Mbps per direction. Use the server's assigned test-interface IP for remote clients. Allow the selected TCP control port and TCP/UDP data port range from the authorized peer. Stop any foreground EdgeWalker server using those ports.
 
 ```sh
 sudoedit /etc/edgewalker/server.env

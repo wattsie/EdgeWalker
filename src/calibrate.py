@@ -2,6 +2,8 @@
 
 import csv
 import json
+from rates import rate_argument, rate_bps
+
 import math
 import signal
 import subprocess
@@ -50,7 +52,7 @@ def add_command(sub):
         help="reserve time for a fresh session starting at each requested ceiling with normal backoff",
     )
     for direction in FILES:
-        p.add_argument("--" + direction + "-max", type=int)
+        p.add_argument("--" + direction + "-max", type=rate_argument, metavar="RATE")
 
 
 def save(path, data):
@@ -189,7 +191,7 @@ def comparable(reference, candidate):
 
 def calibrate(args):
     caps = {
-        d: getattr(args, d + "_max")
+        d: rate_bps(getattr(args, d + "_max"))
         for d in FILES
         if getattr(args, d + "_max") is not None
     }
