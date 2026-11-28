@@ -19,3 +19,7 @@ For the compatibility client, download the pinned install-only stripped CPython 
 runtime=cpython-3.11.18+20261124-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
 curl -fLO "https://github.com/astral-sh/python-build-standalone/releases/download/20261124/$runtime"
 ```
+
+## Published release retention
+
+Keep every full GitHub release and one current release candidate across the repository. After verifying the new candidate's published downloads and checksums, remove older candidate releases and their assets. Preserve their Git tags for source history. Check the public Releases list after cleanup.
