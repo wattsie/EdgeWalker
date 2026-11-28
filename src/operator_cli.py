@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import threading
+import tomllib
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -1005,27 +1006,36 @@ def main():
         argv = ["run", *argv[1:]]
     elif argv[:1] in (["-s"], ["--server"]):
         argv = ["server", *argv[1:]]
-    elif argv and argv[0].startswith("-") and argv[0] not in ("--help", "-h"):
+    elif argv and argv[0].startswith("-") and argv[0] not in ("--help", "-h", "--version", "-V"):
         argv = ["run", *argv]
     parser = argparse.ArgumentParser(prog="edgewalker", epilog=(
         "Use --connect for a client, -s/--server for the gateway, or -m/--menu for interactive setup."
     ))
+    parser.add_argument("-V", "--version", action="store_true", help="print the EdgeWalker version and exit")
+    if argv[:1] in (["--version"], ["-V"]):
+        if len(argv) != 1:
+            parser.error("--version takes no other arguments")
+        with (ROOT / "Cargo.toml").open("rb") as manifest:
+            version = tomllib.load(manifest)["package"]["version"]
+        print(f"edgewalker {version}")
+        return 0
     sub = parser.add_subparsers(dest="action", required=True)
     from calibrate import add_command, calibrate
     add_command(sub)
-    for name in ("server", "keygen"):
-        sub.add_parser(name, add_help=False)
+    sub.add_parser("server", add_help=False, help="start the measurement gateway")
+    sub.add_parser("keygen", add_help=False, help="generate a shared key configuration")
     for name in ("report", "replay"):
-        command = sub.add_parser(name)
+        command = sub.add_parser(name, help={"report": "summarize a recorded run", "replay": "replay a controller trace"}[name])
         command.add_argument("path", type=Path)
         if name == "report":
             command.add_argument(
                 "--html", type=Path, help="write a new standalone HTML report"
             )
-    p = sub.add_parser("run")
-    p.add_argument("--connect", required=not interactive)
-    p.add_argument("--mode", choices=["udp", "tcp", "combined"], required=not interactive)
-    p.add_argument("--output", required=not interactive, type=Path)
+    p = sub.add_parser("run", help="measure a link as a client")
+    menu_help = argv[:1] == ["help"] and argv[-1:] == ["menu"]
+    p.add_argument("--connect", required=not (interactive or menu_help))
+    p.add_argument("--mode", choices=["udp", "tcp", "combined"], required=not (interactive or menu_help))
+    p.add_argument("--output", required=not (interactive or menu_help), type=Path)
     p.add_argument(
         "--duration", type=float, help="wall-clock seconds including setup and recovery"
     )
@@ -1071,6 +1081,8 @@ def main():
     for n in DIRECTIONS:
         p.add_argument("--" + n + "-max", type=int)
         p.add_argument("--" + n + "-start", type=int)
+    help_command = sub.add_parser("help", help="show usage for a command")
+    help_command.add_argument("topic", nargs="?", choices=[*sub.choices, "menu"])
     if not argv:
         parser.print_help()
         return 0
@@ -1078,6 +1090,12 @@ def main():
         binary = engine_path()
         os.execv(binary, [binary, *argv])
     args = parser.parse_args(argv)
+    if args.action == "help":
+        if args.topic in ("server", "keygen"):
+            binary = engine_path()
+            os.execv(binary, [binary, args.topic, "--help"])
+        (p if args.topic == "menu" else sub.choices.get(args.topic, parser)).print_help()
+        return 0
     args.interactive = interactive
     if interactive:
         try:

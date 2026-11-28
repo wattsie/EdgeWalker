@@ -1,5 +1,8 @@
 # Running EdgeWalker
 
+Use `./edgewalker --version` (or `-V`) to print the launcher release version. This works in a source checkout before compiling the engine. Use `./edgewalker help` for the command list and `./edgewalker help COMMAND` for command-specific options, including `help menu` for interactive client setup. The published RC3 launcher predates these shortcuts; use `./bin/edgewalker-native --version` and `./edgewalker COMMAND --help` with that package.
+
+
 Follow the [installation and first calibration instructions](../README.md#install) on each endpoint. Use a local package or build the native engine with `cargo build --release --locked` from the repository root. The supported setup uses Python 3.11 or later and its standard library. The package includes the native engine for the platform in its filename. Run `./edgewalker run --help` for client options and `./edgewalker server --help` for server options.
 
 [Test recipes](#test-recipes) give bounded examples. The [command reference](#command-reference) lists every operator command, native option and live JSON plan field.

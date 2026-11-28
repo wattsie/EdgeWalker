@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import Mock, patch
 
@@ -54,6 +55,22 @@ class LiveMenuContracts(unittest.TestCase):
         self.events.assert_called_once_with("operator_remaining_seconds", "", "open")
         with self.assertRaises(OperatorStop):
             self.command("stop")
+
+    def test_launcher_information_commands(self):
+        cli = ROOT / "edgewalker"
+        version = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
+        for flag in ("-V", "--version"):
+            answer = subprocess.run([cli, flag], capture_output=True, text=True, check=True)
+            self.assertEqual(answer.stdout, f"edgewalker {version}\n")
+            self.assertEqual(answer.stderr, "")
+        for topic in ("run", "server", "keygen", "calibrate", "report", "replay", "menu"):
+            direct = "--menu" if topic == "menu" else topic
+            expected = subprocess.check_output([cli, direct, "--help"])
+            self.assertEqual(subprocess.check_output([cli, "help", topic]), expected)
+        self.assertEqual(subprocess.check_output([cli, "help"]), subprocess.check_output([cli, "-h"]))
+        unknown = subprocess.run([cli, "help", "missing"], capture_output=True)
+        self.assertEqual(unknown.returncode, 2)
+        self.assertFalse(unknown.stdout)
 
     def test_wrapper_modes_and_explicit_terminal(self):
         cli = str(ROOT / "edgewalker")

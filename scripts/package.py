@@ -10,6 +10,7 @@ import platform
 import subprocess
 import tarfile
 import tempfile
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -84,6 +85,9 @@ def main():
         parser.error("--glibc-2-17 requires the x86-64 glibc 2.17 packaging environment")
     binary = args.engine.resolve()
     version = subprocess.check_output([binary, "--version"], text=True).split()[-1]
+    with (ROOT / "Cargo.toml").open("rb") as manifest:
+        if version != tomllib.load(manifest)["package"]["version"]:
+            parser.error("native engine version differs from Cargo.toml; rebuild the engine")
     name = (
         f"edgewalker-{version}-{platform.system().lower()}-{platform.machine().lower()}"
     )
@@ -109,6 +113,7 @@ def main():
                 *dependency_notices(Path(tmp), args.cargo_metadata),
                 (ROOT / "edgewalker", "edgewalker"),
                 (ROOT / "README.md", "README.md"),
+                (ROOT / "Cargo.toml", "Cargo.toml"),
                 (ROOT / "docs/brief.md", "docs/brief.md"),
                 (ROOT / "docs/linux-server-service.md", "docs/linux-server-service.md"),
                 (ROOT / "docs/releasing.md", "docs/releasing.md"),
@@ -151,6 +156,10 @@ def main():
             if k not in {"EDGEWALKER_ENGINE", "EDGEWALKER_CONFIG"}
         }
         subprocess.run([cli, "--help"], check=True, env=env, stdout=subprocess.DEVNULL)
+        for flag in ("-V", "--version"):
+            actual = subprocess.check_output([cli, flag], text=True, env=env).strip()
+            if actual != f"edgewalker {version}":
+                raise ValueError(f"packaged launcher returned unexpected version: {actual}")
         with tempfile.TemporaryDirectory() as smoke:
             config = Path(smoke) / "key.json"
             with config.open("x") as f:

@@ -14,7 +14,7 @@ The Rust engine handles network traffic. Python manages sessions, replays receiv
 
 ## Interactive client on the dynamic branch
 
-Build this checkout with `make build`. At the gateway use `./edgewalker --server` with your usual server options. At the satellite site, run `./edgewalker --menu` to set up a test, or start with your usual client options after `--menu`. With a configured key at each site:
+Use `./edgewalker --version` to check the source version and `./edgewalker help` to list commands. Build this checkout with `make build`. At the gateway use `./edgewalker --server` with your usual server options. At the satellite site, run `./edgewalker --menu` to set up a test, or start with your usual client options after `--menu`. With a configured key at each site:
 
 ```sh
 ./edgewalker -s --listen 127.0.0.1:62000 --capacity 400000
