@@ -31,9 +31,9 @@ For a live satellite trial using the interactive prerelease, take the [offline v
 
 ## Install
 
-Install Python 3.11 or later on each host that uses the Python launcher. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
+Install Python 3.11 or later for the launcher, or use the bundled interpreter in the glibc 2.17 x86-64 package. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
 
-**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. For the interactive client, the [four-platform prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.4) includes all three Linux packages with systemd setup, plus Apple silicon. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
+**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. For the interactive client, the [four-platform prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.5) includes all three Linux packages with systemd setup, plus Apple silicon. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
 
 ```sh
 archive="edgewalker-0.2.0-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).tar.gz"
@@ -55,7 +55,7 @@ python3 --version
 
 ### Intel and AMD Linux field installation
 
-**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.4). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](docs/linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.5). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](docs/linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. The compatibility archive includes CPython 3.11 for client commands.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -70,8 +70,8 @@ For the standard package and Python launcher below, proceed if the results are `
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.4
-archive=edgewalker-0.2.2-rc.4-linux-x86_64.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.5
+archive=edgewalker-0.2.2-rc.5-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256"
@@ -80,7 +80,7 @@ curl -fLO "$release/$archive" &&
 **Single-file handoff.** If you already verified the checksum on the connected machine and transferred only the archive using a trusted copy method, run this on the field host:
 
 ```sh
-archive=edgewalker-0.2.2-rc.4-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.5-linux-x86_64.tar.gz
 tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
   ./bin/edgewalker-native --version && ./edgewalker --menu --help
 ```
@@ -88,7 +88,7 @@ tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
 **With the checksum onsite**, use this alternative from the download directory:
 
 ```sh
-archive=edgewalker-0.2.2-rc.4-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.5-linux-x86_64.tar.gz
 sha256sum -c "$archive.sha256" &&
   tar -xzf "$archive" &&
   cd "${archive%.tar.gz}" &&
@@ -96,7 +96,7 @@ sha256sum -c "$archive.sha256" &&
   ./edgewalker --menu --help
 ```
 
-Expect the archive checksum to report `OK`, native version `0.2.2-rc.4`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
+Expect the archive checksum to report `OK`, native version `0.2.2-rc.5`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
 
 **Build from source** on a Linux or macOS host with Git, make, a C linker, Python 3.11+ and a current stable Rust toolchain with Cargo. On macOS the Command Line Tools provide make and the linker. On Debian-family Linux the `build-essential` package provides them. From a shell with Git installed:
 
@@ -113,7 +113,7 @@ make build
 For a localhost check, start the server in one terminal. Generate the key once in a new private directory. For later runs, reuse that file.
 
 ```sh
-(umask 077 && mkdir -m 700 lab && ./edgewalker keygen > lab/config.json) &&
+(umask 077 && mkdir -m 700 lab && ./edgewalker keygen --output lab/config.json) &&
   ./edgewalker server --config lab/config.json --listen 127.0.0.1:62000 --capacity 400000
 ```
 

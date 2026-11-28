@@ -132,7 +132,9 @@ def report(directory):
             continue
         path = directory / filename
         sums = {}
-        rows = 0
+        rows = measured_ms = cohort_bytes = 0
+        last_reason = last_clean = None
+        has_cohort = True
         if path.exists():
             with path.open() as f:
                 for row in csv.DictReader(f):
@@ -145,6 +147,18 @@ def report(directory):
                             raise ValueError("UDP sender range mismatch")
                         row.update(udp_pending=corr["pending"], udp_lost=corr["lost"])
 
+                    last_reason = row.get("reason")
+                    last_clean = int(row["last_clean_bps"]) if row.get("last_clean_bps") else None
+                    measured_ms += int(row["end_ms"]) - int(row["start_ms"])
+                    if row.get("udp_sent"):
+                        size = manifest["settings"][name].get("udp_size", 1000)
+                        if row.get("cohort_received_bytes") and corr:
+                            cohort_bytes += (int(corr["sent"]) - int(corr["pending"]) - int(corr["lost"])
+                                             + int(corr["reordered"])) * size
+                        elif row.get("cohort_received_bytes"):
+                            cohort_bytes += int(row["cohort_received_bytes"])
+                        elif int(row["udp_sent"]):
+                            has_cohort = False
                     if int(row.get("udp_pending") or 0):
                         pending_ranges.append(
                             dict(
@@ -174,7 +188,10 @@ def report(directory):
                 100 * entry["udp_lost"] / n if n and not entry["udp_pending"] else None
             )
         result["directions"][name] = dict(
-            windows=rows,
+            windows=rows, last_reason=last_reason, last_verified_clean_bps=last_clean,
+            active_delivered_bps=sums["whole"]["received_bytes"] * 8000 // measured_ms if measured_ms else None,
+            udp_cohort_bytes=cohort_bytes if has_cohort and sums.get("whole", {}).get("udp_sent") else None,
+            udp_cohort_bps=cohort_bytes * 8000 // measured_ms if has_cohort and measured_ms and sums["whole"]["udp_sent"] else None,
             phases=sums,
             steady_udp_loss_pct=sums.get("steady", {}).get("udp_loss_pct"),
         )

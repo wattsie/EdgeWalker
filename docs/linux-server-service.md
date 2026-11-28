@@ -1,6 +1,6 @@
 # Linux compatibility package and server startup
 
-Use the Linux x86-64 glibc 2.17 package on a 64-bit Intel or AMD host with glibc 2.17 or later and the system libgcc runtime. The **native gateway server and key generator need no Python**. The interactive client, calibration and reports require Python 3.11 or later. The client can run on a separate machine.
+Use the Linux x86-64 glibc 2.17 package on a 64-bit Intel or AMD host with glibc 2.17 or later and the system libgcc runtime. The **native gateway server and key generator need no Python**. The compatibility archive includes a local CPython 3.11 runtime for the client, calibration and reports. Extract the complete archive and run `./edgewalker --version` without installing a system Python.
 
 ## Verify and extract
 
@@ -9,8 +9,8 @@ Run these commands on the server. Expect `x86_64` and `glibc 2.17` or newer. Fro
 ```sh
 uname -m
 getconf GNU_LIBC_VERSION
-archive=edgewalker-0.2.2-rc.4-linux-x86_64-glibc2.17.tar.gz
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.4
+archive=edgewalker-0.2.2-rc.5-linux-x86_64-glibc2.17.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.5
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256" &&
@@ -18,7 +18,7 @@ curl -fLO "$release/$archive" &&
   ./bin/edgewalker-native --version
 ```
 
-The embedded engine version is 0.2.2-rc.4. Keep this directory available for the service files and field guide.
+The embedded engine version is 0.2.2-rc.5. Keep this directory available for the service files and field guide.
 
 ## Install the gateway
 

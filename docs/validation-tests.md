@@ -1,16 +1,16 @@
 # Validation Tests
 
-EdgeWalker satellite field guide for the interactive prerelease `0.2.2-rc.4`.
+EdgeWalker satellite field guide for the interactive prerelease `0.2.2-rc.5`.
 
 Start with a 30-second forward TCP test to verify the route, delivery and shutdown. Then compare one TCP connection with two under the same total offer. UDP calibration is a separate, optional test. All commands run locally from the extracted package directory. Each client run needs a new output directory.
 
 ## Before leaving for the site
 
-Take the appropriate release archive and a way to provision the shared key securely. The x86-64 archive contains this guide. Keep its matching checksum if you plan to verify it again onsite. Hosts using the Python launcher need Python 3.11 or later. The available binaries support Linux x86-64, Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
+Take the appropriate release archive and a way to provision the shared key securely. The x86-64 archive contains this guide. Keep its matching checksum if you plan to verify it again onsite. The glibc 2.17 x86-64 archive includes its own Python. Other hosts using the launcher need Python 3.11 or later. The available binaries support Linux x86-64, Linux ARM64 and Apple silicon. Agree on directional caps, duration and a quiet test window with the link owner.
 
 ### Intel and AMD Linux field installation
 
-**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.4). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.5). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. The compatibility archive includes CPython 3.11 for client commands.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -25,8 +25,8 @@ For the standard package and Python launcher below, proceed if the results are `
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.4
-archive=edgewalker-0.2.2-rc.4-linux-x86_64.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.5
+archive=edgewalker-0.2.2-rc.5-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256"
@@ -35,7 +35,7 @@ curl -fLO "$release/$archive" &&
 **Single-file handoff.** If you already verified the checksum on the connected machine and transferred only the archive using a trusted copy method, run this on the field host:
 
 ```sh
-archive=edgewalker-0.2.2-rc.4-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.5-linux-x86_64.tar.gz
 tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
   ./bin/edgewalker-native --version && ./edgewalker --menu --help
 ```
@@ -43,7 +43,7 @@ tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
 **With the checksum onsite**, use this alternative from the download directory:
 
 ```sh
-archive=edgewalker-0.2.2-rc.4-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.5-linux-x86_64.tar.gz
 sha256sum -c "$archive.sha256" &&
   tar -xzf "$archive" &&
   cd "${archive%.tar.gz}" &&
@@ -51,23 +51,23 @@ sha256sum -c "$archive.sha256" &&
   ./edgewalker --menu --help
 ```
 
-Expect the archive checksum to report `OK`, native version `0.2.2-rc.4`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
+Expect the archive checksum to report `OK`, native version `0.2.2-rc.5`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
 
 ### ARM installations
 
-For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.4) and the appropriate block below.
+For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.5) and the appropriate block below.
 
 Linux ARM64:
 
 ```sh
-archive=edgewalker-0.2.2-rc.4-linux-aarch64.tar.gz
+archive=edgewalker-0.2.2-rc.5-linux-aarch64.tar.gz
 sha256sum -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
 Apple silicon:
 
 ```sh
-archive=edgewalker-0.2.2-rc.4-darwin-arm64.tar.gz
+archive=edgewalker-0.2.2-rc.5-darwin-arm64.tar.gz
 shasum -a 256 -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
@@ -79,14 +79,14 @@ python3 --version
 ./edgewalker --menu --help
 ```
 
-Expect native version `0.2.2-rc.4`.
+Expect native version `0.2.2-rc.5`.
 
 ### Shared key on all platforms
 
 For a new installation, generate one key on the gateway. This command refuses to overwrite an existing file.
 
 ```sh
-(umask 077 && mkdir -p lab && set -C && ./edgewalker keygen > lab/config.json)
+(umask 077 && mkdir -p lab && set -C && ./edgewalker keygen --output lab/config.json)
 ```
 
 Securely provision that same file at `lab/config.json` inside the satellite client's extracted directory. If credentials are already provisioned, use them. On each host run `chmod 600 lab/config.json`. Keep the key file separate from test results.
@@ -184,3 +184,20 @@ Retain `sat-calibration-01/plan.json` and `evidence.json` together. Inspect the 
 After the last test, stop the foreground gateway server with Ctrl-C. Check that the trial listener has closed (Linux `ss -ltn`, macOS `lsof -nP -iTCP:62000 -sTCP:LISTEN`) and that satellite WAN traffic returns to its prior level. Remove any temporary forwarding or firewall access arranged for the trial.
 
 Keep each complete results directory, the package versions, approved caps, the route used, and the approximate UTC time of any visible outage or flow-count edit. Missing feedback is a coverage gap. Retain failed runs alongside their repeats. This guide and the result files can be read offline.
+
+## High-delay UDP smoke test
+
+At roughly 640 ms RTT, allow 60 seconds for a first bidirectional check. Authentication, admission and readiness count toward the deadline. A shorter run may collect too few settled windows to verify a clean rate. From the client, set GATEWAY to the test-interface address and provision the matching key first.
+
+```sh
+./edgewalker run --connect "${GATEWAY}:62000" --config lab/config.json \
+  --mode udp --forward-start 1M --forward-max 1M --return-start 1M --return-max 1M \
+  --window-ms 5000 --duration 60 --output udp-check
+./edgewalker report udp-check
+```
+
+Use RC5 at both ends. When a receiver snapshot has an open UDP tail, the peers exchange an authenticated sender count and collect outstanding datagrams for up to one additional second at each receiver. The client allows up to three seconds after the run deadline to collect the outstanding receipt. This exchange sends no further test payload. A missing packet followed by a higher sequence counts as loss even if it arrives later. Silence at the final sequence leaves that suffix pending. An interrupted control channel can also leave coverage incomplete.
+
+In each direction compare active-window delivered rate (`active_delivered_bps`) with `udp_cohort_bps`, the unique UDP bytes observed for those sender windows divided by their combined duration. The series preserves the original cutoff measurement. Check `coverage_complete`, pending ranges, and the last controller reason before treating a zero loss count as a clean result. Neither rate includes setup or inter-window pauses.
+
+The launcher can be symlinked into PATH. The glibc 2.17 x86-64 archive automatically selects its bundled interpreter. To select a separately installed Python 3.11+ interpreter, set `EDGEWALKER_PYTHON=/opt/python311/bin/python3` to its actual path. The native server and key generator run directly without Python. When extracting shared program files under /opt as root, use a public, traversable program directory and a subshell with `umask 022`. Keep keys in a separate private directory. Check journalctl -u edgewalker-server for peer, assigned data port, admission and connection-end events.

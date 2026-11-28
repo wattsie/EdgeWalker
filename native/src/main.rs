@@ -36,7 +36,11 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Command {
-    Keygen,
+    Keygen {
+        /// Create a new private configuration file (default: standard output).
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
     Server {
         #[arg(long, default_value = "127.0.0.1:62000")]
         listen: SocketAddr,
@@ -138,6 +142,8 @@ enum Admission {
         token: [u8; 32],
         #[serde(default)]
         resize: bool,
+        #[serde(default)]
+        reconcile: bool,
     },
     Rejected {
         requested: Rates,
@@ -388,6 +394,7 @@ impl Slot {
 #[derive(Serialize, Deserialize)]
 enum Request {
     Window(Window, u64),
+    Reconcile { window: u32, sent: u64 },
     Resize(Rates),
     Ready(u32),
     Stop,
@@ -433,6 +440,7 @@ fn serve_session(
     let mut plan: Session = c.recv()?;
     validate_session(&plan)?;
     if plan.overload_ms > allow_overload_ms {
+        eprintln!("session rejected peer={peer} reason=overload");
         c.send(&Admission::OverloadDenied {
             allowed_ms: allow_overload_ms,
         })?;
@@ -441,6 +449,7 @@ fn serve_session(
     let mut remaining_overload = plan.overload_ms;
     let mut reservation = reserved_rates(&plan, plan.max);
     if let Err(rejection) = slot.reserve(cap, reservation) {
+        eprintln!("session rejected peer={peer} reason=capacity");
         c.send(&rejection)?;
         return Ok(());
     }
@@ -451,15 +460,21 @@ fn serve_session(
     }) = slot.allocate_ports(local, ports, plan.mode)?
     else {
         let (first, last) = ports.unwrap_or((0, 0));
+        eprintln!("session rejected peer={peer} reason=data_ports");
         c.send(&Admission::DataPortsUnavailable { first, last })?;
         return Ok(());
     };
+    eprintln!(
+        "session admitted peer={peer} mode={:?} data_port={port}",
+        plan.mode
+    );
     let token = random()?;
     c.send(&Admission::Ready {
         udp: if udp.is_some() { port } else { 0 },
         tcp: if listener.is_some() { port } else { 0 },
         token,
         resize: true,
+        reconcile: true,
     })?;
     // The client opens its admitted sockets in order before acknowledging the join.
     c.0.set_read_timeout(Some(join_timeout(plan.mode, plan.flow_limit)))?;
@@ -502,9 +517,25 @@ fn serve_session(
     let mut prev = 0;
     let mut base = 0;
     let mut previous_udp = None;
+    let mut reconcile_limit = None;
     loop {
         let (w, peer_base) = match c.recv::<Request>()? {
             Request::Window(w, base) => (w, base),
+            Request::Reconcile { window, sent } => {
+                let limit = reconcile_limit.take().context("no open UDP window")?;
+                ensure!(
+                    window == prev && sent <= limit,
+                    "invalid UDP close boundary"
+                );
+                let correction = engine::drain_tail(
+                    udp.as_ref().context("UDP unavailable")?,
+                    previous_udp.as_mut().context("no UDP receiver")?,
+                    sent,
+                    plan.udp_size,
+                )?;
+                c.send(&correction)?;
+                continue;
+            }
             Request::Ready(id) => {
                 ensure!(id == prev, "wrong readiness generation");
                 c.send(&id)?;
@@ -555,6 +586,8 @@ fn serve_session(
                 udp_size: plan.udp_size,
             },
         )?;
+        reconcile_limit = (plan.mode != Mode::Tcp)
+            .then(|| engine::udp_count_limit(w.rates.reverse, plan.mode, w.ms, plan.udp_size));
         base += result.udp.sent;
         c.send(&result)?;
     }
@@ -596,7 +629,8 @@ fn server(
         let slot = Slot(ledger.clone(), peer, Rates::default(), None);
         let key = key.clone();
         thread::spawn(move || {
-            let _ = serve_session(s, &key, cap, ports, allow_overload_ms, slot);
+            let outcome = serve_session(s, &key, cap, ports, allow_overload_ms, slot);
+            eprintln!("connection ended peer={peer} orderly={}", outcome.is_ok());
         });
     }
     Ok(())
@@ -622,13 +656,14 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
     let local = sock.local_addr()?.ip();
     let mut c = Control::authenticate(sock, key, true)?;
     c.send(&plan)?;
-    let (up, tp, token, resize) = match c.recv::<Admission>()? {
+    let (up, tp, token, resize, reconcile) = match c.recv::<Admission>()? {
         Admission::Ready {
             udp,
             tcp,
             token,
             resize,
-        } => (udp, tcp, token, resize),
+            reconcile,
+        } => (udp, tcp, token, resize, reconcile),
         r => bail!("admission rejected: {}", serde_json::to_string(&r)?),
     };
     let mut tcp = Vec::new();
@@ -703,7 +738,7 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
             peer_base == expected_peer_base,
             "unexpected sender sequence boundary"
         );
-        let local = engine::measure(
+        let mut local = engine::measure(
             &c.0,
             Some(&udp),
             &mut tcp,
@@ -730,8 +765,35 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
             },
         )?;
         base += local.udp.sent;
-        let remote: Endpoint = c.recv()?;
+        let mut remote: Endpoint = c.recv()?;
         remote.validate_feedback(&local, w, plan.mode, plan.udp_size, peer_base)?;
+        if reconcile
+            && plan.mode != Mode::Tcp
+            && (remote.udp.received.highest < local.udp.sent
+                || local.udp.received.highest < remote.udp.sent)
+        {
+            c.send(&Request::Reconcile {
+                window: w.id,
+                sent: local.udp.sent,
+            })?;
+            local.closed_udp = Some(engine::drain_tail(
+                &udp,
+                previous_udp.as_mut().context("no UDP receiver")?,
+                remote.udp.sent,
+                plan.udp_size,
+            )?);
+            let correction: history::Correction = c.recv()?;
+            ensure!(
+                correction.window == w.id
+                    && correction.sent == local.udp.sent
+                    && correction.pending <= correction.sent - remote.udp.received.highest
+                    && correction.lost >= remote.udp.received.skipped
+                    && correction.lost <= correction.sent - correction.pending
+                    && correction.reordered <= correction.lost,
+                "invalid final UDP coverage"
+            );
+            remote.closed_udp = Some(correction);
+        }
         expected_peer_base = peer_base
             .checked_add(remote.udp.sent)
             .context("UDP sequence exhausted")?;
@@ -744,13 +806,28 @@ fn client(addr: SocketAddr, mut plan: Session, key: &str) -> Result<()> {
 fn main() -> Result<()> {
     let args = Args::parse();
     match args.command {
-        Command::Keygen => {
+        Command::Keygen { output } => {
+            ensure!(
+                args.key.is_none() && args.config.is_none(),
+                "keygen takes --output for a new key file"
+            );
             let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
             let code: String = random()?[..16]
                 .iter()
                 .map(|b| alphabet[(b & 63) as usize] as char)
                 .collect();
-            println!("{}", json!({"key":code}));
+            let config = json!({"key":code});
+            if let Some(path) = output {
+                use std::os::unix::fs::OpenOptionsExt;
+                let mut file = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o600)
+                    .open(path)?;
+                writeln!(file, "{config}")?;
+            } else {
+                println!("{config}");
+            }
             Ok(())
         }
         Command::Server {

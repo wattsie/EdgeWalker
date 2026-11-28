@@ -1,5 +1,7 @@
 """Package the current host build without publishing or installing anything."""
 
+from compat_runtime import add_runtime
+
 import argparse
 import hashlib
 import json
@@ -79,7 +81,10 @@ def main():
     )
     parser.add_argument("--glibc-2-17", action="store_true",
                         help="label a Linux x86-64 archive built and tested on glibc 2.17")
+    parser.add_argument("--python-runtime", type=Path, help="pinned standalone CPython tarball for the compatibility client")
     args = parser.parse_args()
+    if args.glibc_2_17 != bool(args.python_runtime):
+        parser.error("--glibc-2-17 and --python-runtime must be supplied together")
     if args.glibc_2_17 and (platform.system() != "Linux" or platform.machine() != "x86_64"
                             or os.confstr("CS_GNU_LIBC_VERSION") != "glibc 2.17"):
         parser.error("--glibc-2-17 requires the x86-64 glibc 2.17 packaging environment")
@@ -107,6 +112,8 @@ def main():
     with tempfile.TemporaryDirectory(dir=args.output) as tmp:
         archive = Path(tmp) / (name + ".tar.gz")
         with tarfile.open(archive, "w:gz") as t:
+            if args.python_runtime:
+                add_runtime(t, name, args.python_runtime, ROOT / "third-party/python-runtime")
             for src, target in [
                 (binary, "bin/edgewalker-native"),
                 *linux_files,

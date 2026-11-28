@@ -160,6 +160,12 @@ class LiveDirection:
         tcp_goodput = tcp_bytes * 8000 // ms
         lost = rx["skipped"]
         pending = max(0, tx - rx["highest"])
+        closed = receiver.get("closed_udp")
+        if closed:
+            pending, lost = closed["pending"], closed["lost"]
+        reordered = closed["reordered"] if closed else rx["reordered"]
+        duplicates = closed["duplicates"] if closed else rx["duplicates"]
+        cohort_bytes = (tx - pending - lost + reordered) * udp_size
         preferred = rx if self.mode != "tcp" else tcp[0]
         transit = preferred["median_transit_us"]
         growth = preferred["delay_growth_us"]
@@ -320,9 +326,9 @@ class LiveDirection:
                 offered_bps=offer,
                 first=self.sequence + 1,
                 last=self.sequence + tx,
-                received_bytes=tcp_bytes + udp_bytes,
+                received_bytes=tcp_bytes + cohort_bytes,
                 sequence_counts=dict(
-                    lost=lost, reordered=rx["reordered"], duplicates=rx["duplicates"]
+                    lost=lost, reordered=reordered, duplicates=duplicates
                 ),
                 excess_delay_us=delay,
                 delay_growth_us=growth,
@@ -382,6 +388,8 @@ class LiveDirection:
             * 8000
             // ms,
             delivered_bps=delivered,
+            cohort_received_bytes=cohort_bytes if tx else None,
+            cohort_udp_bps=cohort_bytes * 8000 // ms if tx else None,
             arrival_bps=arrival_bytes * 8000 // ms,
             delay_evidence_bps=delay_delivery,
             timing_source=timing_source,
@@ -395,8 +403,8 @@ class LiveDirection:
             udp_sent=tx if self.mode != "tcp" else None,
             udp_pending=pending if self.mode != "tcp" else None,
             udp_lost=lost if self.mode != "tcp" else None,
-            udp_reordered=rx["reordered"] if tx else None,
-            udp_duplicates=rx["duplicates"] if tx else None,
+            udp_reordered=reordered if tx else None,
+            udp_duplicates=duplicates if tx else None,
             tcp_goodput_bps=tcp_goodput if tcp else None,
             tcp_flows=active_flows if tcp else None,
             retransmissions=sum(retries) if retries and None not in retries else None,
@@ -804,7 +812,7 @@ def run(args):
                     )
                     for timeout, n, timer in timers:
                         try:
-                            result = proc.read(min(end, due + timeout / 1000))
+                            result = proc.read(min(end + 3, due + timeout / 1000))
                             break
                         except Deadline:
                             if time.monotonic() >= end:
@@ -825,7 +833,7 @@ def run(args):
                     else:
                         # The bounded window has ended. Give the active peer a
                         # chance to finish its authenticated report before replacing it.
-                        result = proc.read(min(end, time.monotonic() + 5))
+                        result = proc.read(min(end + 3, time.monotonic() + 5))
                     if result.get("window") != window:
                         raise ValueError("native window mismatch")
                     session_window = number
@@ -1117,7 +1125,19 @@ def main():
             print(json.dumps(row, sort_keys=True))
     else:
         signal.signal(signal.SIGTERM, signal.default_int_handler)
-        return run(args)
+        code = run(args)
+        if code == 0:
+            summary = report(args.output)
+            for name, direction in summary["directions"].items():
+                whole = direction["phases"].get("whole", {})
+                rate = direction["active_delivered_bps"]
+                loss = whole.get("udp_loss_pct")
+                clean = direction["last_verified_clean_bps"]
+                print(f"{name}: active delivery {display_rate(rate) if rate is not None else 'unknown'}, "
+                      f"UDP loss {f'{loss:.2f}%' if loss is not None else 'n/a'}, "
+                      f"pending {whole.get('udp_pending', 0)}, last verified {display_rate(clean) if clean else 'unknown'}, "
+                      f"verdict {direction['last_reason'] or 'unverified'}")
+        return code
 
 
 if __name__ == "__main__":

@@ -70,6 +70,8 @@ pub struct Endpoint {
     pub resources: crate::host::Resources,
     pub timing: crate::timing::Timing,
     pub udp_sequence_base: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed_udp: Option<crate::history::Correction>,
     pub prior_udp: Option<crate::history::Correction>,
     pub late_udp_observations: Received,
     pub udp: Lane,
@@ -109,7 +111,8 @@ impl Endpoint {
             count * size as u128 * 8000 <= offer as u128 * w.ms as u128
         };
         ensure!(
-            self.udp_sequence_base == base
+            self.closed_udp.is_none()
+                && self.udp_sequence_base == base
                 && self.tcp.len() == local.tcp.len()
                 && within(self.udp.sent as u128, udp_size, udp_offer)
                 && within(
@@ -138,6 +141,48 @@ impl Endpoint {
         }
         Ok(())
     }
+}
+
+pub fn udp_count_limit(rate: u64, mode: Mode, ms: u64, size: usize) -> u64 {
+    (split(rate, mode).0 as u128 * ms as u128 / (8000 * size as u128)) as u64
+}
+
+/// Collect only this sender-declared cohort. Silence leaves its suffix unknown.
+pub fn drain_tail(
+    udp: &UdpSocket,
+    prior: &mut crate::history::Prior,
+    sent: u64,
+    size: usize,
+) -> Result<crate::history::Correction> {
+    let end = prior
+        .base
+        .checked_add(sent)
+        .context("UDP boundary overflow")?;
+    let deadline = Instant::now() + Duration::from_secs(1);
+    let mut buf = vec![0; size + 1];
+    while prior.high < sent && Instant::now() < deadline {
+        match udp.recv(&mut buf) {
+            Ok(n)
+                if n == size
+                    && &buf[20..24] == b"EWD1"
+                    && u64::from_be_bytes(buf[12..20].try_into()?) < (1u64 << 50) =>
+            {
+                let id = u32::from_be_bytes(buf[..4].try_into()?);
+                let seq = u64::from_be_bytes(buf[4..12].try_into()?);
+                if id == prior.window {
+                    prior.receive(id, seq, 0, end)?;
+                }
+            }
+            Ok(_) => (),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                ) => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    prior.close(end)
 }
 
 fn split(rate: u64, mode: Mode) -> (u64, u64) {
@@ -575,6 +620,7 @@ pub fn measure(
                 resources: resource_sample.finish(),
                 timing,
                 udp_sequence_base: base,
+                closed_udp: None,
                 prior_udp,
                 late_udp_observations,
                 udp: Lane {
@@ -596,6 +642,41 @@ pub fn measure(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn close_window_drains_delayed_payload_and_preserves_a_real_gap() {
+        let receiver = UdpSocket::bind("127.0.0.1:0").unwrap();
+        receiver
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .unwrap();
+        let sender = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let destination = receiver.local_addr().unwrap();
+        let worker = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(60));
+            for sequence in [3u64, 2, 5] {
+                let mut packet = [0; 64];
+                packet[..4].copy_from_slice(&7u32.to_be_bytes());
+                packet[4..12].copy_from_slice(&sequence.to_be_bytes());
+                packet[20..24].copy_from_slice(b"EWD1");
+                sender.send_to(&packet, destination).unwrap();
+            }
+        });
+        let mut prior = crate::history::Prior {
+            window: 7,
+            base: 0,
+            high: 1,
+            lost: 0,
+            reordered: 0,
+            duplicates: 0,
+            seen: [1].into(),
+        };
+        let report = drain_tail(&receiver, &mut prior, 6, 64).unwrap();
+        worker.join().unwrap();
+        assert_eq!(
+            (report.sent, report.lost, report.reordered, report.pending),
+            (6, 2, 1, 1)
+        );
+    }
+
     #[test]
     fn window_feedback_must_match_admitted_offer_and_sender_range() {
         let w = Window {

@@ -32,6 +32,11 @@ def verify(directory):
                 member = package.getmember(f"{stem}/{path}")
                 if not member.isfile() or package.extractfile(member).read() != (ROOT / path).read_bytes():
                     raise ValueError(f"{archive.name} has incorrect {path}")
+            if target.endswith("glibc2.17"):
+                runtime = package.getmember(f"{stem}/runtime/bin/python3.11")
+                if not runtime.isfile() or not runtime.mode & 0o111:
+                    raise ValueError("missing compatibility Python interpreter")
+                package.getmember(f"{stem}/third-party/python-runtime/LICENSE.cpython.txt")
             engine = package.getmember(f"{stem}/bin/edgewalker-native")
             if not engine.isfile() or not engine.size or not engine.mode & 0o111:
                 raise ValueError(f"{archive.name} has no executable engine")

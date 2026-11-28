@@ -10,7 +10,7 @@ In a plan or synthetic replay JSON, quote shorthand values, for example `"start_
 
 
 
-Follow the [installation and first calibration instructions](../README.md#install) on each endpoint. Use a local package or build the native engine with `cargo build --release --locked` from the repository root. The supported setup uses Python 3.11 or later and its standard library. The package includes the native engine for the platform in its filename. Run `./edgewalker run --help` for client options and `./edgewalker server --help` for server options.
+Follow the [installation and first calibration instructions](../README.md#install) on each endpoint. Use a local package or build the native engine with `cargo build --release --locked` from the repository root. The launcher uses Python 3.11 or later and its standard library. The glibc 2.17 x86-64 package includes its interpreter. The package includes the native engine for the platform in its filename. Run `./edgewalker run --help` for client options and `./edgewalker server --help` for server options.
 
 [Test recipes](#test-recipes) give bounded examples. The [command reference](#command-reference) lists every operator command, native option and live JSON plan field.
 
@@ -19,7 +19,7 @@ Follow the [installation and first calibration instructions](../README.md#instal
 Create a private configuration file on the lab endpoints with the same 12–16 character key. The generator produces 16 random characters. Run both terminals from the same source or extracted package directory. Create a new private directory before generating the key. Supply its path with `--config` or `EDGEWALKER_CONFIG`. The per-user fallback is `$XDG_CONFIG_HOME/edgewalker/config.json` or `~/.config/edgewalker/config.json`. A one-run `--key` overrides the file.
 
 ```sh
-(umask 077 && mkdir -m 700 lab && ./edgewalker keygen > lab/config.json) &&
+(umask 077 && mkdir -m 700 lab && ./edgewalker keygen --output lab/config.json) &&
   ./edgewalker server --config lab/config.json --listen 127.0.0.1:62000 --capacity 1000000
 ```
 
@@ -187,7 +187,7 @@ A report reads an existing run directory and prints JSON, including recorded cov
 
 | Command | Inputs and output |
 |---|---|
-| `keygen` | Prints a JSON object containing one random 16-character key to stdout. Redirect once to a private file. Its native parser accepts global `--config` and `--key`, but key generation does not read either value. |
+| `keygen` | Use `keygen --output PATH` to create a new private file (0600). An existing file or either credential input option is an error. With no arguments the generated configuration goes to stdout. |
 | `server` | Starts a foreground native listener and prints its bound control address as JSON. Keep it running for the test. |
 | `run` | Authenticates the client, obtains capacity, adjusts the offer from receiver feedback and records results in a new directory. |
 | `calibrate` | Runs bounded UDP calibration and writes a compatible plan and per-setting evidence. See [automatic UDP calibration](#automatic-udp-calibration). |

@@ -1,2 +1,16 @@
 #!/bin/sh
-exec python3 -B "$(dirname "$0")/src/operator_cli.py" "$@"
+set -eu
+launcher=$0
+while [ -L "$launcher" ]; do
+    target=$(readlink "$launcher")
+    case $target in
+        /*) launcher=$target ;;
+        *) launcher=$(dirname "$launcher")/$target ;;
+    esac
+done
+root=$(CDPATH='' cd -P "$(dirname "$launcher")" && pwd)
+python=python3
+if [ -x "$root/runtime/bin/python3.11" ]; then
+    python=$root/runtime/bin/python3.11
+fi
+exec "${EDGEWALKER_PYTHON:-$python}" -B "$root/src/operator_cli.py" "$@"

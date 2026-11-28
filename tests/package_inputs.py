@@ -60,6 +60,11 @@ with tempfile.TemporaryDirectory() as tmp:
         record(program,command,flag,case,'Nonzero exit, secret-safe diagnostic, no traceback'+(', no created paths' if no_files else ''),
                dict(exit=r.returncode,diagnostic=bool(r.stderr),secret_absent=clean,traceback=trace,created_count=len(effects)),
                r.returncode!=0 and clean and not trace and bool(r.stderr) and (not no_files or not effects))
+    linked = base / "linked launcher"
+    linked.symlink_to(os.path.relpath(bins['launcher'],base))
+    version=subprocess.run([linked,'--version'],capture_output=True,text=True,env=env)
+    record('launcher','root','--version','relative symlink','Report version through a PATH link',
+           dict(exit=version.returncode),version.returncode==0 and version.stdout.startswith('edgewalker '))
     for pr,commands in [('launcher',['','run','server','keygen','report','replay']),('native',['','client','server','keygen','help'])]:
         for cmd in commands:
             reject(pr,cmd,'command',['--unlisted-setting',text],case='unknown option')
@@ -86,13 +91,18 @@ with tempfile.TemporaryDirectory() as tmp:
         reject(pr,'server','--capacity/--tx/--rx',server+['--tx','12','--rx','12'],case='conflicting settings')
         for mode in ('keygen','server'):
             reject(pr,mode,'--key',['--key'],case='missing value')
-        # Keygen ignores credentials by design and creates no config file.
-        before=set(work.iterdir())
-        r=call(pr,'keygen',['--config',work/(text+' absent'),'--key',key])
-        generated=json.loads(r.stdout)['key'] if r.returncode==0 else ''
-        record(pr,'keygen','--config/--key','literal unused options','Generated 16-character key, no file or diagnostic',
-               dict(exit=r.returncode,length=len(generated),created_count=len(set(work.iterdir())-before)),
-               len(generated)==16 and not r.stderr and before==set(work.iterdir()) and key not in r.stdout)
+        for flag,value in [('--config',work/'unused'),('--key',key)]:
+            r=call(pr,'keygen',[flag,value])
+            record(pr,'keygen',flag,'incompatible','Reject without disclosing a key',dict(exit=r.returncode),
+                   r.returncode!=0 and not r.stdout and key not in r.stderr)
+        dest=work/(pr+' private.json')
+        r=call(pr,'keygen',['--output',dest])
+        original=dest.read_bytes()
+        retry=call(pr,'keygen',['--output',dest])
+        record(pr,'keygen','--output','exclusive private file','Create once at mode 0600',
+               dict(exit=r.returncode,retry=retry.returncode),r.returncode==0 and not r.stdout
+               and dest.stat().st_mode & 0o777 == 0o600 and len(json.loads(original)['key'])==16
+               and retry.returncode!=0 and not retry.stdout and dest.read_bytes()==original)
     for pr,cmd,common in [('launcher','server',server),('native','server',server),('native','client',basic)]:
         reject(pr,cmd,'--config',common+['--config',text],case='literal missing path')
         reject(pr,cmd,'--key',common+['--key','tiny'],case='invalid key length')
