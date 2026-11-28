@@ -1,6 +1,6 @@
 # Validation Tests
 
-EdgeWalker satellite field guide for the interactive prerelease `0.2.2-rc.2`.
+EdgeWalker satellite field guide for the interactive prerelease `0.2.2-rc.3`.
 
 Start with a 30-second forward TCP test to verify the route, delivery and shutdown. Then compare one TCP connection with two under the same total offer. UDP calibration is a separate, optional test. All commands run locally from the extracted package directory. Each client run needs a new output directory.
 
@@ -10,7 +10,7 @@ Take the appropriate release archive and a way to provision the shared key secur
 
 ### Intel and AMD Linux field installation
 
-**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.2). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.3). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -25,8 +25,8 @@ For the standard package and Python launcher below, proceed if the results are `
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.2
-archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.3
+archive=edgewalker-0.2.2-rc.3-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256"
@@ -35,7 +35,7 @@ curl -fLO "$release/$archive" &&
 **Single-file handoff.** If you already verified the checksum on the connected machine and transferred only the archive using a trusted copy method, run this on the field host:
 
 ```sh
-archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.3-linux-x86_64.tar.gz
 tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
   ./bin/edgewalker-native --version && ./edgewalker --menu --help
 ```
@@ -43,7 +43,7 @@ tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
 **With the checksum onsite**, use this alternative from the download directory:
 
 ```sh
-archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.3-linux-x86_64.tar.gz
 sha256sum -c "$archive.sha256" &&
   tar -xzf "$archive" &&
   cd "${archive%.tar.gz}" &&
@@ -51,23 +51,23 @@ sha256sum -c "$archive.sha256" &&
   ./edgewalker --menu --help
 ```
 
-Expect the archive checksum to report `OK`, native version `0.2.2-rc.2`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
+Expect the archive checksum to report `OK`, native version `0.2.2-rc.3`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
 
 ### ARM installations
 
-For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.2) and the appropriate block below.
+For ARM hosts, use the matching archive and checksum from the [ARM field-guide prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.3) and the appropriate block below.
 
 Linux ARM64:
 
 ```sh
-archive=edgewalker-0.2.2-rc.2-linux-aarch64.tar.gz
+archive=edgewalker-0.2.2-rc.3-linux-aarch64.tar.gz
 sha256sum -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
 Apple silicon:
 
 ```sh
-archive=edgewalker-0.2.2-rc.2-darwin-arm64.tar.gz
+archive=edgewalker-0.2.2-rc.3-darwin-arm64.tar.gz
 shasum -a 256 -c "$archive.sha256" && tar -xzf "$archive" && cd "${archive%.tar.gz}"
 ```
 
@@ -79,7 +79,7 @@ python3 --version
 ./edgewalker --menu --help
 ```
 
-Expect native version `0.2.2-rc.2`.
+Expect native version `0.2.2-rc.3`.
 
 ### Shared key on all platforms
 
@@ -97,19 +97,19 @@ The terrestrial gateway runs the server. The satellite site runs the client and 
 
 If the gateway service is already active with the specified address, ports and capacity, proceed to the client command.
 
-**Gateway terminal.** Replace the example IP with an address assigned to the gateway's test interface. Permit the satellite site's traffic to TCP control port 5207 and the selected TCP/UDP data ports 5210 through 5220. If the gateway is behind NAT, arrange forwarding for those ports and give the client the reachable address. Keep this terminal open.
+**Gateway terminal.** Replace the example IP with an address assigned to the gateway's test interface. Permit the satellite site's traffic to TCP control port 62000 and the selected TCP/UDP data ports 62001 through 62008. If the gateway is behind NAT, arrange forwarding for those ports and give the client the reachable address. Keep this terminal open.
 
 ```sh
 GATEWAY_BIND=192.0.2.10
 ./edgewalker --server --config lab/config.json \
-  --listen "$GATEWAY_BIND:5207" --data-ports 5210-5220 --capacity 1000000
+  --listen "$GATEWAY_BIND:62000" --data-ports 62001-62008 --capacity 1000000
 ```
 
 **Satellite client terminal.** Replace the example with the reachable gateway IP. On Linux run `ip route get "$GATEWAY"`; on macOS run `route -n get "$GATEWAY"`. Check the interface and next hop against the site's routing plan. If a tunnel or alternate WAN is present, confirm traffic on the satellite WAN counters during the test.
 
 ```sh
 GATEWAY=192.0.2.10
-./edgewalker run --config lab/config.json --connect "$GATEWAY:5207" \
+./edgewalker run --config lab/config.json --connect "$GATEWAY:62000" \
   --mode tcp --forward-start 1000000 --forward-max 1000000 \
   --flows 1 --flow-limit 1 --window-ms 1000 \
   --duration 30 --output sat-smoke-01
@@ -130,13 +130,13 @@ The suspected single-flow plateau is around **38 Mbps**. The example requests **
 
 ```sh
 ./edgewalker --server --config lab/config.json \
-  --listen "$GATEWAY_BIND:5207" --data-ports 5210-5220 --capacity 60000000
+  --listen "$GATEWAY_BIND:62000" --data-ports 62001-62008 --capacity 60000000
 ```
 
 **Satellite client.** Start one fixed flow with a second socket prepared:
 
 ```sh
-./edgewalker --menu --config lab/config.json --connect "$GATEWAY:5207" \
+./edgewalker --menu --config lab/config.json --connect "$GATEWAY:62000" \
   --mode tcp --forward-start 60000000 --forward-max 60000000 \
   --flows 1 --flow-limit 2 --window-ms 1000 \
   --duration 180 --output sat-tcp-01
@@ -165,7 +165,7 @@ Run calibration when you want directional UDP controller settings. The TCP compa
 **Satellite client:**
 
 ```sh
-./edgewalker calibrate --config lab/config.json --connect "$GATEWAY:5207" \
+./edgewalker calibrate --config lab/config.json --connect "$GATEWAY:62000" \
   --forward-max 400000 --return-max 200000 \
   --duration 600 --output sat-calibration-01
 ```
@@ -173,7 +173,7 @@ Run calibration when you want directional UDP controller settings. The TCP compa
 Retain `sat-calibration-01/plan.json` and `evidence.json` together. Inspect the setting evidence for each direction. Exit status 2 can indicate insufficient evidence. Unsupported adjustments remain at their provisional values. If desired, exercise the resulting plan in a separate two-minute UDP run:
 
 ```sh
-./edgewalker run --config lab/config.json --connect "$GATEWAY:5207" \
+./edgewalker run --config lab/config.json --connect "$GATEWAY:62000" \
   --mode udp --plan sat-calibration-01/plan.json --timing-every 0 \
   --duration 120 --output sat-udp-verification-01
 ./edgewalker report sat-udp-verification-01
@@ -181,6 +181,6 @@ Retain `sat-calibration-01/plan.json` and `evidence.json` together. Inspect the 
 
 ## Finish and retain evidence
 
-After the last test, stop the foreground gateway server with Ctrl-C. Check that the trial listener has closed (Linux `ss -ltn`, macOS `lsof -nP -iTCP:5207 -sTCP:LISTEN`) and that satellite WAN traffic returns to its prior level. Remove any temporary forwarding or firewall access arranged for the trial.
+After the last test, stop the foreground gateway server with Ctrl-C. Check that the trial listener has closed (Linux `ss -ltn`, macOS `lsof -nP -iTCP:62000 -sTCP:LISTEN`) and that satellite WAN traffic returns to its prior level. Remove any temporary forwarding or firewall access arranged for the trial.
 
 Keep each complete results directory, the package versions, approved caps, the route used, and the approximate UTC time of any visible outage or flow-count edit. Missing feedback is a coverage gap. Retain failed runs alongside their repeats. This guide and the result files can be read offline.

@@ -17,9 +17,9 @@ The Rust engine handles network traffic. Python manages sessions, replays receiv
 Build this checkout with `make build`. At the gateway use `./edgewalker --server` with your usual server options. At the satellite site, run `./edgewalker --menu` to set up a test, or start with your usual client options after `--menu`. With a configured key at each site:
 
 ```sh
-./edgewalker -s --listen 127.0.0.1:5000 --capacity 400000
+./edgewalker -s --listen 127.0.0.1:62000 --capacity 400000
 # In another terminal
-./edgewalker -m --connect 127.0.0.1:5000 --mode tcp --forward-start 100000 \
+./edgewalker -m --connect 127.0.0.1:62000 --mode tcp --forward-start 100000 \
   --forward-max 200000 --flows 1 --flow-limit 2 --duration 60 --output menu-test
 ```
 
@@ -31,7 +31,7 @@ For a live satellite trial using the interactive prerelease, take the [offline v
 
 Install Python 3.11 or later on each host that uses the Python launcher. The launcher uses the standard library. Keep the extracted directory together so it can find the native engine and Python modules.
 
-**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. For the interactive client, the [four-platform prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.2) includes all three Linux packages with systemd setup, plus Apple silicon. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
+**Install a release archive** from the [releases page](https://github.com/wattsie/EdgeWalker/releases). Download the archive and its matching `.sha256` to a new directory. Choose `darwin-arm64` for Apple silicon, `linux-aarch64` for ARM64 Linux, or `linux-x86_64` for Intel and AMD 64-bit Linux. For the interactive client, the [four-platform prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.3) includes all three Linux packages with systemd setup, plus Apple silicon. The following generic example installs stable 0.2.0. For the interactive menu on Intel or AMD Linux, use the field installation below. From the download directory:
 
 ```sh
 archive="edgewalker-0.2.0-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m).tar.gz"
@@ -53,7 +53,7 @@ python3 --version
 
 ### Intel and AMD Linux field installation
 
-**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.2). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](docs/linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
+**Older server or automatic startup:** For a server with glibc 2.17 through 2.33, use the [compatibility prerelease](https://github.com/wattsie/EdgeWalker/releases/tag/v0.2.2-rc.3). The archive name ends in `linux-x86_64-glibc2.17.tar.gz`. Follow the bundled [Linux server setup](docs/linux-server-service.md) for verification, key provisioning, and systemd startup. The native server runs without Python. Client commands require Python 3.11 or later.
 
 Use the same Linux x86-64 package on AMD Ryzen and Intel Core or Xeon machines. Run these checks **on each host**, including the gateway:
 
@@ -68,8 +68,8 @@ For the standard package and Python launcher below, proceed if the results are `
 For the interactive field test, download the archive and matching checksum into a new directory on an internet-connected machine. Verify the archive on the connected machine before transferring it. For verification on the offline host as well, keep the checksum alongside it. The archive contains the field guide.
 
 ```sh
-release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.2
-archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
+release=https://github.com/wattsie/EdgeWalker/releases/download/v0.2.2-rc.3
+archive=edgewalker-0.2.2-rc.3-linux-x86_64.tar.gz
 curl -fLO "$release/$archive" &&
   curl -fLO "$release/$archive.sha256" &&
   sha256sum -c "$archive.sha256"
@@ -78,7 +78,7 @@ curl -fLO "$release/$archive" &&
 **Single-file handoff.** If you already verified the checksum on the connected machine and transferred only the archive using a trusted copy method, run this on the field host:
 
 ```sh
-archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.3-linux-x86_64.tar.gz
 tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
   ./bin/edgewalker-native --version && ./edgewalker --menu --help
 ```
@@ -86,7 +86,7 @@ tar -xzf "$archive" && cd "${archive%.tar.gz}" &&
 **With the checksum onsite**, use this alternative from the download directory:
 
 ```sh
-archive=edgewalker-0.2.2-rc.2-linux-x86_64.tar.gz
+archive=edgewalker-0.2.2-rc.3-linux-x86_64.tar.gz
 sha256sum -c "$archive.sha256" &&
   tar -xzf "$archive" &&
   cd "${archive%.tar.gz}" &&
@@ -94,7 +94,7 @@ sha256sum -c "$archive.sha256" &&
   ./edgewalker --menu --help
 ```
 
-Expect the archive checksum to report `OK`, native version `0.2.2-rc.2`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
+Expect the archive checksum to report `OK`, native version `0.2.2-rc.3`, and the menu help text. If any check fails, stop before starting traffic. From the extracted directory, open `docs/validation-tests.md` for the field procedure.
 
 **Build from source** on a Linux or macOS host with Git, make, a C linker, Python 3.11+ and a current stable Rust toolchain with Cargo. On macOS the Command Line Tools provide make and the linker. On Debian-family Linux the `build-essential` package provides them. From a shell with Git installed:
 
@@ -112,20 +112,20 @@ For a localhost check, start the server in one terminal. Generate the key once i
 
 ```sh
 (umask 077 && mkdir -m 700 lab && ./edgewalker keygen > lab/config.json) &&
-  ./edgewalker server --config lab/config.json --listen 127.0.0.1:5207 --capacity 400000
+  ./edgewalker server --config lab/config.json --listen 127.0.0.1:62000 --capacity 400000
 ```
 
 Open a second terminal in the same installation directory. This example allows up to 400 kbps forward and 200 kbps return over a total of ten minutes.
 
 ```sh
-./edgewalker calibrate --config lab/config.json --connect 127.0.0.1:5207 \
+./edgewalker calibrate --config lab/config.json --connect 127.0.0.1:62000 \
   --forward-max 400000 --return-max 200000 --duration 600 --output calibration-01
 ```
 
 Read `calibration-01/evidence.json` before applying `plan.json`. Exit 2 with completed evidence files means at least one direction lacked support for a tuning change. Invalid command syntax can also exit 2. Apply the plan in a fresh run and inspect the report:
 
 ```sh
-./edgewalker run --config lab/config.json --connect 127.0.0.1:5207 --mode udp \
+./edgewalker run --config lab/config.json --connect 127.0.0.1:62000 --mode udp \
   --plan calibration-01/plan.json --timing-every 0 --duration 120 --output verification-01
 ./edgewalker report verification-01
 ```

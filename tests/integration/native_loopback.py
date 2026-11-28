@@ -113,7 +113,8 @@ class NativeLoopback(unittest.TestCase):
     def test_four_clients_share_control_only(self):
         server = self.start("server", "--listen", "127.0.0.1:0", "--capacity", "1600000")
         address = json.loads(server.stdout.readline())["listening"]
-        exercise(BIN, self.cfg, address)
+        result = exercise(BIN, self.cfg, address)
+        self.assertTrue(all(62001 <= port <= 62008 for port in result["ports"] + result["replacement_ports"]))
 
     def test_single_port_exhaustion_across_transports(self):
         with socket.socket() as probe:

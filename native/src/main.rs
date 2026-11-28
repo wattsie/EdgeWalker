@@ -38,10 +38,11 @@ struct Args {
 enum Command {
     Keygen,
     Server {
-        #[arg(long)]
+        #[arg(long, default_value = "127.0.0.1:62000")]
         listen: SocketAddr,
-        #[arg(long,value_parser=parse_ports)]
-        data_ports: Option<(u16, u16)>,
+        /// Inclusive data port range, or auto to let the OS select ports.
+        #[arg(long, default_value = "62001-62008", value_parser=parse_ports)]
+        data_ports: PortSelection,
         #[arg(long, default_value_t = 0)]
         allow_overload_ms: u64,
         #[arg(long, conflicts_with_all=["tx","rx"])]
@@ -266,11 +267,17 @@ fn validate(w: Window, plan: &Session, prev: u32) -> Result<()> {
     }
     Ok(())
 }
-fn parse_ports(text: &str) -> Result<(u16, u16)> {
+#[derive(Clone, Copy)]
+struct PortSelection(Option<(u16, u16)>);
+
+fn parse_ports(text: &str) -> Result<PortSelection> {
+    if text == "auto" {
+        return Ok(PortSelection(None));
+    }
     let (low, high) = text.split_once('-').context("expected FIRST-LAST")?;
     let (low, high) = (low.parse::<u16>()?, high.parse::<u16>()?);
     ensure!(low > 0 && low <= high, "invalid data port range");
-    Ok((low, high))
+    Ok(PortSelection(Some((low, high))))
 }
 struct DataPorts {
     port: u16,
@@ -714,7 +721,7 @@ fn main() -> Result<()> {
                 forward: capacity.or(tx).context("set explicit capacity")?,
                 reverse: capacity.or(rx).context("set explicit capacity")?,
             };
-            server(listen, cap, data_ports, allow_overload_ms, key(&args)?)
+            server(listen, cap, data_ports.0, allow_overload_ms, key(&args)?)
         }
         Command::Client {
             connect,

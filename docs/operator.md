@@ -10,13 +10,13 @@ Create a private configuration file on the lab endpoints with the same 12–16 c
 
 ```sh
 (umask 077 && mkdir -m 700 lab && ./edgewalker keygen > lab/config.json) &&
-  ./edgewalker server --config lab/config.json --listen 127.0.0.1:5207 --capacity 1000000
+  ./edgewalker server --config lab/config.json --listen 127.0.0.1:62000 --capacity 1000000
 ```
 
 In another terminal using the same configuration, run a 20-second combined-mode measurement. The server sends forward traffic and the client sends return traffic. All rates are application bits per second. Each maximum includes every flow, the UDP canary and any timing replies in that direction.
 
 ```sh
-./edgewalker run --config lab/config.json --connect 127.0.0.1:5207 \
+./edgewalker run --config lab/config.json --connect 127.0.0.1:62000 \
   --mode combined --forward-start 400000 --forward-max 800000 \
   --return-start 300000 --return-max 600000 --duration 20 --output run-01
 ./edgewalker report run-01
@@ -32,11 +32,11 @@ To stop the foreground example server after the clients finish, press Ctrl-C in 
 
 Clients connect to the same TCP control listener. After authentication and capacity admission, the server reserves one data-port number per active session. A TCP test opens up to 16 independent TCP connections to that number. UDP uses a single data socket, and combined mode uses both TCP and UDP on the session's number. Each TCP connection presents the session token. UDP setup verifies a challenge round trip. Measurement starts after the server confirms readiness. Port separation keeps sessions distinct; the shared key and session proofs authenticate setup.
 
-For four clients, provide at least four usable data-port numbers and enough total capacity for their requested maxima in each direction. The server accepts up to eight simultaneous workers and up to four from the same source IP, including peers behind one NAT. The configured range in the systemd example provides eleven candidate numbers. An occupied port is skipped. If the server cannot allocate a number for the required transport, it rejects the new session with `DataPortsUnavailable`. Existing sessions retain their sockets and capacity. A stop, detected disconnect or session timeout releases the session's reservation. A silent peer can retain its allocation until the server detects the timeout.
+For four clients, provide at least four usable data-port numbers and enough total capacity for their requested maxima in each direction. The server accepts up to eight simultaneous workers and up to four from the same source IP, including peers behind one NAT. The configured range in the systemd example provides eight candidate numbers. An occupied port is skipped. If the server cannot allocate a number for the required transport, it rejects the new session with `DataPortsUnavailable`. Existing sessions retain their sockets and capacity. A stop, detected disconnect or session timeout releases the session's reservation. A silent peer can retain its allocation until the server detects the timeout.
 
 If a firewall is present, allow TCP to the control port from the authorized clients and allow established return traffic. For the data range, allow TCP for TCP tests, UDP for UDP tests, and both for combined tests. Clients initiate the data joins even for forward measurements. On a gateway behind NAT, forward the advertised data numbers to the same internal port numbers and forward the control port to the same server. No firewall change is needed on a path that already permits this traffic.
 
-A single server capacity provisions each directional pool. Use `--tx BPS --rx BPS` to provision them independently. The server reserves both requested maxima under one lock before admitting a bidirectional session. Use `--data-ports FIRST-LAST` to bound data listener ports. The default uses ephemeral ports. Eight concurrent setup/session workers and four workers per source bound load. Failed handshakes rate-limit that source. Control frames are length-bounded and encrypted with a fresh Noise session using the result of a role-bound SPAKE2 exchange.
+A single server capacity provisions each directional pool. Use `--tx BPS --rx BPS` to provision them independently. The server reserves both requested maxima under one lock before admitting a bidirectional session. Use `--data-ports FIRST-LAST` to bound data listener ports. The default range is 62001–62008. Use `--data-ports auto` for OS-allocated ports. Eight concurrent setup/session workers and four workers per source bound load. Failed handshakes rate-limit that source. Control frames are length-bounded and encrypted with a fresh Noise session using the result of a role-bound SPAKE2 exchange.
 
 UDP defaults to 1,000-byte sequenced records (set `--udp-size` to 128–9,000 bytes), one stream per direction. Combined mode allocates one tenth of the bulk budget to UDP. The timing sampler requests a small reply every 32 UDP records by default. Set `--timing-every 0` to disable timing exchanges. A one-direction UDP run reserves a reverse allowance for replies. Periodic measurement windows have a bounded drain interval. The server offsets the return receiver cutoff by the control socket’s smoothed round-trip time, up to two seconds, to allow the window acknowledgement and first return data to traverse the path. The series separates current-offer delivery (`delivered_bps`) from the arrival rate of all data records during the receiver interval (`arrival_bps`), including packets queued under an earlier offer. The raw record also includes bytes received during drain. UDP gaps count once, and a late arrival preserves the original gap. An unresolved trailing range leaves coverage incomplete.
 
@@ -63,7 +63,7 @@ The default starting offer is the requested directional maximum. Set `--forward-
 Save the example JSON as `forward-plan.json`. From the client terminal, launch a forward-only test with the plan supplying its ceiling and starting rate:
 
 ```sh
-./edgewalker run --config lab/config.json --connect 127.0.0.1:5207 \
+./edgewalker run --config lab/config.json --connect 127.0.0.1:62000 \
   --mode udp --plan forward-plan.json --duration 30 --output run-plan
 ```
 
@@ -98,10 +98,10 @@ Run each client command from the same directory as `edgewalker`, with the server
 The first command starts UDP at 200 kbps and permits it to rise to 800 kbps. Inspect `series-fl.csv` for the client receiver's delivered throughput and the reason for each decision. The second sends TCP from client to server, fixes two active flows and writes the return results to `series-rl.csv`.
 
 ```sh
-./edgewalker run --config lab/config.json --connect 127.0.0.1:5207 \
+./edgewalker run --config lab/config.json --connect 127.0.0.1:62000 \
   --mode udp --forward-start 200000 --forward-max 800000 \
   --window-ms 1000 --duration 15 --output run-forward-udp
-./edgewalker run --config lab/config.json --connect 127.0.0.1:5207 \
+./edgewalker run --config lab/config.json --connect 127.0.0.1:62000 \
   --mode tcp --return-max 800000 --flow-limit 2 --flows 2 \
   --window-ms 1000 --duration 15 --output run-return-tcp
 ```
@@ -127,10 +127,10 @@ Set `TEST_SERVER` to the numeric address and control port announced by the test 
 
 ### Initially offline server and automatic recovery
 
-With the key already created, choose a free loopback port (5208 below). Start this client **before** the server. Leave it running in the first terminal.
+With the key already created, choose a free loopback port (62000 below). Start this client **before** the server. Leave it running in the first terminal.
 
 ```sh
-./edgewalker run --config lab/config.json --connect 127.0.0.1:5208 \
+./edgewalker run --config lab/config.json --connect 127.0.0.1:62000 \
   --mode udp --forward-max 400000 --window-ms 1000 \
   --duration 30 --output run-offline
 ```
@@ -138,7 +138,7 @@ With the key already created, choose a free loopback port (5208 below). Start th
 Within about five seconds, start the server in a second terminal:
 
 ```sh
-./edgewalker server --config lab/config.json --listen 127.0.0.1:5208 --capacity 1000000
+./edgewalker server --config lab/config.json --listen 127.0.0.1:62000 --capacity 1000000
 ```
 
 With initial-offline recovery, expect the original client to record a gap, authenticate when the server comes online and write fresh receiver windows before its original deadline. Inspect `./edgewalker report run-offline` and `events.csv`. If the server stays offline for the full run, expect a failure with zero receiver windows. Stop the example server after the client finishes.
@@ -190,17 +190,17 @@ A report reads an existing run directory and prints JSON, including recorded cov
 |---|---|
 | `--config PATH` | On `server`, `run` and `calibrate`, selects a JSON file containing a string field named `key`. With no flag, lookup order is `EDGEWALKER_CONFIG`, `$XDG_CONFIG_HOME/edgewalker/config.json` when set, then `~/.config/edgewalker/config.json`. Provision the same lab key at each endpoint. |
 | `--key KEY` | On `server` and `run`, overrides config lookup for this invocation. Accepts 12–16 characters. A literal command-line value can appear in process listings or shell history. The examples use a config file. |
-| `--listen IP:PORT` | Required for `server`. Numeric socket address on the local host. Use port 0 to select an available port and read the emitted `listening` value. Use brackets around an IPv6 literal, e.g. `[::1]:5207`. |
+| `--listen IP:PORT` | Defaults to `127.0.0.1:62000`. Set the local test-interface address for remote clients. Use port 0 to select an available port and read the emitted `listening` value. Use brackets around an IPv6 literal, e.g. `[::1]:62000`. |
 | `--capacity BPS` | Sets the aggregate capacity of **each** server pool across its concurrent sessions. Supply this or both `--tx` and `--rx`. |
 | `--tx BPS`, `--rx BPS` | Set server transmit (forward) and receive (return) pools independently. Both are required together; `--capacity` is mutually exclusive. A reservation that exceeds either available pool is rejected before bulk traffic starts. |
-| `--data-ports FIRST-LAST` | Inclusive range 1–65535 for server data listeners, e.g. `5300-5310`. First must be at most last. Omit for OS-allocated ports. The control address comes from `--listen`. |
+| `--data-ports FIRST-LAST` | Inclusive range 1–65535 for server data listeners, e.g. `62001-62008`. First must be at most last. The default is `62001-62008`; specify `auto` for OS-allocated ports. The control address comes from `--listen`. |
 | `--allow-overload-ms MS` | Largest optional overload duration a client may request at admission. Default 0 disables overload. Both endpoints must opt in; the normal admitted rate ceilings still apply. |
 
 ### Client run options
 
 | Option | Scope, defaults and interactions |
 |---|---|
-| `--connect IP:PORT` | Required numeric server control address, for example `127.0.0.1:5207`. Use the address printed by a server listening on port 0. |
+| `--connect IP:PORT` | Required numeric server control address, for example `127.0.0.1:62000`. Use the address printed by a server listening on port 0. |
 | `--mode MODE` | Required. UDP uses sequenced datagrams; TCP uses one or more connections. Combined assigns approximately 10% of each direction’s bulk rate to the UDP canary and the remainder to TCP. |
 | `--output DIR` | Required new run directory. Parent directories may already exist. Existing DIR fails so previous evidence is preserved. |
 | `--config PATH`, `--key KEY` | Same credential precedence as the server. |
@@ -254,7 +254,7 @@ For example, with the local server from the quickstart running, this single 500 
 ```sh
 printf '%s\n' '{"id":1,"ms":500,"rates":{"forward":400000,"reverse":0},"flows":{"forward":1,"reverse":1}}' null |
   ./bin/edgewalker-native client --config lab/config.json \
-    --connect 127.0.0.1:5207 --mode udp --forward-max 400000
+    --connect 127.0.0.1:62000 --mode udp --forward-max 400000
 ```
 
 ## Automatic UDP calibration
@@ -262,11 +262,11 @@ printf '%s\n' '{"id":1,"ms":500,"rates":{"forward":400000,"reverse":0},"flows":{
 Start an authenticated EdgeWalker server on the receiving host with capacity for each requested direction. On the client, choose the control endpoint, directional maxima in bits per second and a total duration in seconds. Both hosts need a matching local key. The following example uses localhost, a 400 kbps forward ceiling and a 200 kbps return ceiling.
 
 ```sh
-./edgewalker server --config lab/config.json --listen 127.0.0.1:5207 --capacity 400000
+./edgewalker server --config lab/config.json --listen 127.0.0.1:62000 --capacity 400000
 # In another terminal
-./edgewalker calibrate --connect 127.0.0.1:5207 --config lab/config.json \
+./edgewalker calibrate --connect 127.0.0.1:62000 --config lab/config.json \
   --forward-max 400000 --return-max 200000 --duration 600 --output calibration-01
-./edgewalker run --mode udp --connect 127.0.0.1:5207 --config lab/config.json \
+./edgewalker run --mode udp --connect 127.0.0.1:62000 --config lab/config.json \
   --plan calibration-01/plan.json --timing-every 0 \
   --duration 120 --output verification-01
 ```
